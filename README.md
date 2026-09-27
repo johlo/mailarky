@@ -10,8 +10,8 @@ test can cover a complete email round trip with no real mail provider.
 Use Mail Sandbox when the code under test does more than send email:
 
 - **It reads a mailbox.** Examples are importing replies, syncing a
-  correspondence history or processing incoming requests. Capture tools such as
-  Mailpit have no IMAP, so this code normally needs a real mail account.
+  correspondence history or processing incoming requests. Without a sandbox,
+  this code normally needs a real mail account.
 - **It needs mail history to exist first.** You can seed messages with
   historical dates, custom headers or raw MIME, then let the application import
   them through its normal IMAP client.
@@ -21,9 +21,6 @@ Use Mail Sandbox when the code under test does more than send email:
   anomalies can target a single message, so one test's failure never affects
   another test's mail.
 
-If you only capture outgoing mail and view it in a browser, Mailpit is the
-simpler choice. Mail Sandbox has no web UI.
-
 ## Key features
 
 | Feature | What it gives you |
@@ -31,15 +28,15 @@ simpler choice. Mail Sandbox has no web UI.
 | One mailbox, three interfaces | SMTP deliveries land in `Sent`, seeded fixtures in `INBOX`. HTTP and TLS IMAP see the same message, flags and raw MIME. |
 | Mailbox per test | `POST /api/v1/mailboxes` creates an isolated account with its own IMAP credentials, SMTP recipient addresses, folders, UIDs and toxics. Delete it when the test ends. |
 | Message-scoped fault injection ("toxics") | Reject or delay SMTP, and delay, hide or rewrite messages returned over IMAP. Each toxic matches specific messages, never a whole server. |
-| Mailpit-style HTTP API | The search, message detail, raw MIME, attachment, tag and read-flag endpoints follow Mailpit's API v1, so existing Mailpit-based assertions carry over with few changes. |
+| HTTP inspection API | Search with a filter syntax (`to:`, `subject:`, `message-id:`, …), then read message details, raw MIME, attachments, tags and read flags. |
 | Test data seeding | Add JSON fixtures, import raw `.eml` files or use IMAP `APPEND`, with any `Date` and `Message-ID`. Reusing a Message-ID in two folders tests deduplication. |
 | Realistic IMAP | Implicit TLS with a bundled test certificate, stable UIDs, and a UIDVALIDITY that changes when in-memory state is lost on restart. It exercises the same client code as production. |
 | Safe by default | Mail is stored in memory and never leaves the sandbox. Persistence (bbolt), relay and forwarding are available but must be turned on explicitly. |
 
 Other features are WebSocket and webhook notifications, retention limits,
 HTML compatibility and link checks, Prometheus metrics, and optional SMTP/HTTP
-authentication and TLS. See [compatibility](docs/reference/compatibility.md)
-for the full list, including how it differs from Mailpit.
+authentication and TLS. See [capabilities](docs/reference/compatibility.md)
+for the full list.
 
 ## Quick start
 
@@ -98,7 +95,7 @@ between untrusted tenants.
 | Seed historical or custom MIME mail | [Test scenarios](docs/how-to/seed-test-scenarios.md) |
 | Run locally, persist mail, use in CI | [Run and test](docs/how-to/run-and-test.md) |
 | Look up the contract | [HTTP API](docs/reference/http-api.md), [OpenAPI](openapi.yaml), [configuration](docs/reference/configuration.md), [IMAP behavior](docs/reference/imap-behavior.md) |
-| Compare with Mailpit | [Compatibility](docs/reference/compatibility.md) |
+| See every capability | [Capabilities](docs/reference/compatibility.md) |
 | Understand storage and isolation | [Design](docs/explanation/design.md) |
 | Diagnose a problem | [Troubleshooting](docs/how-to/troubleshoot.md) |
 
