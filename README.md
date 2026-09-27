@@ -35,7 +35,7 @@ Use Mail Sandbox when the code under test does more than send email:
 
 Other features are WebSocket and webhook notifications, retention limits,
 HTML compatibility and link checks, Prometheus metrics, and optional SMTP/HTTP
-authentication and TLS. See [capabilities](docs/reference/compatibility.md)
+authentication and TLS. See [capabilities](docs/reference/capabilities.md)
 for the full list.
 
 ## Quick start
@@ -95,7 +95,7 @@ between untrusted tenants.
 | Seed historical or custom MIME mail | [Test scenarios](docs/how-to/seed-test-scenarios.md) |
 | Run locally, persist mail, use in CI | [Run and test](docs/how-to/run-and-test.md) |
 | Look up the contract | [HTTP API](docs/reference/http-api.md), [OpenAPI](openapi.yaml), [configuration](docs/reference/configuration.md), [IMAP behavior](docs/reference/imap-behavior.md) |
-| See every capability | [Capabilities](docs/reference/compatibility.md) |
+| See every capability | [Capabilities](docs/reference/capabilities.md) |
 | Understand storage and isolation | [Design](docs/explanation/design.md) |
 | Diagnose a problem | [Troubleshooting](docs/how-to/troubleshoot.md) |
 

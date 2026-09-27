@@ -1,90 +1,77 @@
-# Use message-scoped toxics in concurrent tests
+# Simulate failures with toxics
 
-For complete state isolation, [create a separate mailbox per test](separate-mailboxes.md)
-and prefix toxic paths with its returned api_base. Toxic names and hit counts
-belong to that account. Within an account, give each test a unique token, preferably a UUID, and include it in an
-`X-Test-ID` header or Message-ID. A unique envelope recipient is useful when the
-application cannot add headers. Scope both message assertions and cleanup to
-that token. Never clear the whole mailbox or delete other tests' toxics.
+A toxic makes the sandbox misbehave for **specific messages only**, such as
+rejecting one SMTP delivery or hiding one message from IMAP. Other tests keep
+working normally, even in parallel.
 
-## Create, disable, enable, inspect and delete
+## Example
 
-The following toxic rejects only mail carrying `X-Test-ID: run-a-unique-token`
-with a temporary SMTP failure after DATA. Replace the token for every test.
+Reject the next delivery that carries `X-Test-ID: run-42`:
 
 ```sh
-curl -fsS http://localhost:8026/api/v1/toxics -H 'Content-Type: application/json'   -d '{"name":"run-a-reject","type":"smtp_reject","enabled":true,"selector":{"headers":{"X-Test-ID":"run-a-unique-token"}},"attributes":{"stage":"data","code":451},"max_hits":1}'
+curl -fsS http://localhost:8026/api/v1/toxics -H 'Content-Type: application/json' -d '{
+  "name": "run-42-reject",
+  "type": "smtp_reject",
+  "selector": {"headers": {"X-Test-ID": "run-42"}},
+  "attributes": {"stage": "data", "code": 451},
+  "max_hits": 1
+}'
 
-curl -fsS -X PATCH http://localhost:8026/api/v1/toxics/run-a-reject   -H 'Content-Type: application/json' -d '{"enabled":false}'
-curl -fsS -X PATCH http://localhost:8026/api/v1/toxics/run-a-reject   -H 'Content-Type: application/json' -d '{"enabled":true}'
-curl -fsS http://localhost:8026/api/v1/toxics/run-a-reject
-curl -fsS -X DELETE http://localhost:8026/api/v1/toxics/run-a-reject
+# ... run the test ...
+
+curl -fsS -X DELETE http://localhost:8026/api/v1/toxics/run-42-reject
 ```
 
-Create defaults to enabled. `PUT /api/v1/toxics/{name}` replaces the definition
-(and creates it when absent). PATCH changes only `enabled`. PUT/PATCH preserve
-`hits`; delete and recreate to reset them. Unique names prevent collisions.
-Cleanup belongs in the test's `finally`/defer block. Disabling/deleting prevents
-future matches; a delay already claimed is allowed to finish.
+For a [separate mailbox](separate-mailboxes.md), prefix the path with its
+`api_base`.
 
-## Select a message
-
-All supplied selector fields must match:
-
-| Field | Comparison |
-| --- | --- |
-| `message_id` | Exact Message-ID, ignoring surrounding angle brackets |
-| `headers` | Every named header must contain the exact supplied value; header names ignore case |
-| `from` | Exact envelope sender, ignoring case; header fallback for fixtures/IMAP APPEND |
-| `to` | One exact envelope recipient, ignoring case; header fallback for fixtures/IMAP APPEND |
-| `folder` | Exact folder name, an additional restriction |
-
-At least `message_id`, `from`, `to`, or a nonempty header selector is mandatory.
-Empty selectors, folder-only selectors and wildcard patterns are rejected.
-Use an address unique to the test: choosing a shared clinic address deliberately
-matches multiple tests and defeats isolation. A shared message containing several
-tests' recipient addresses is also one SMTP transaction, so a DATA rejection
-rejects that transaction for all its recipients.
-
-## Choose a toxic
+## Types
 
 | Type | Attributes | Effect |
 | --- | --- | --- |
-| `smtp_reject` | `code` 400–599; optional `stage` | Fails matching SMTP transaction; rejected DATA is not stored |
-| `smtp_delay` | `delay_ms` 0–30000; optional `stage` | Delays matching SMTP command |
-| `imap_delay` | `delay_ms` 0–30000 | Delays matching SEARCH candidates or FETCH records |
-| `imap_hide` | none | Omits matching records from SEARCH/FETCH responses |
-| `imap_replace_header` | `header`, `value` | Changes the header in returned IMAP content; empty value removes it |
+| `smtp_reject` | `code` (400–599), `stage` | Rejects the SMTP transaction. Rejected mail is not stored. |
+| `smtp_delay` | `delay_ms` (≤ 30000), `stage` | Delays the SMTP command |
+| `imap_delay` | `delay_ms` (≤ 30000) | Delays SEARCH/FETCH results for the message |
+| `imap_hide` | — | Leaves the message out of SEARCH/FETCH results |
+| `imap_replace_header` | `header`, `value` | Changes a header in the IMAP response (empty value removes it) |
 
-SMTP stages are `sender` (envelope sender check), `recipient` (RCPT TO), and `data`
-(default). Recipient routing chooses an account at the first RCPT TO; sender
-toxics run then, before recipient toxics, so default-account faults cannot affect
-another account. Before DATA the server has no headers or Message-ID: `sender`
-requires only `from`, and `recipient` accepts only envelope `from`/`to`.
-The API rejects impossible early-stage header selectors. Connection/authentication
-failures are intentionally excluded because no individual message exists yet.
+SMTP `stage` is `sender`, `recipient` or `data` (the default). Before `data`
+the server knows only envelope addresses, so select by `from`/`to` there.
 
-`probability` is optional, defaults to 1, and ranges from 0 to 1. `max_hits`
-defaults to zero (unlimited). Matching/probability selection and hit accounting
-are atomic across connections. A hit counts a selected toxic, including a toxic
-later short-circuited by an earlier reject/hide in registration order. Tests
-needing deterministic behavior should use one toxic per operation and probability 1.
+IMAP toxics change only what IMAP returns. The stored message and the HTTP API
+are unaffected.
 
-## Understand the isolation boundary
+## Selectors
 
-SMTP delays and IMAP delays never hold mailbox or toxic registry locks. Separate
-connections continue serving unrelated messages. IMAP SEARCH first narrows the
-candidates using the original message, then applies toxics; a search for test B
-cannot consume or wait on test A's toxic. Header replacements affect fetched
-content and the final search check, but do not make a message searchable under
-an injected value that did not match the original candidate search.
+All given fields must match. Provide at least one of `message_id`, `headers`,
+`from` or `to`.
 
-A single IMAP command requesting both tests' messages still waits for every
-selected message. Use per-test connections and searches/UID sets. `imap_hide`
-hides responses, not STATUS counts; toxics never rewrite raw stored mail, affect
-HTTP inspection, or delete messages. Toxics are ephemeral and reset on restart,
-even when messages are persisted.
+| Field | Matches |
+| --- | --- |
+| `message_id` | Exact Message-ID (angle brackets optional) |
+| `headers` | Exact header values; header names ignore case |
+| `from` / `to` | Exact envelope address, ignoring case |
+| `folder` | Additional restriction on the folder |
 
-The global `/api/v1/chaos` update endpoint and `MP_ENABLE_CHAOS` are rejected.
-They cannot meet the isolation contract. See [OpenAPI](../../openapi.yaml) for
-request/response schemas.
+Wildcards and selectors that match everything are rejected.
+
+## Options and lifecycle
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `enabled` | `true` | `PATCH /api/v1/toxics/{name}` with `{"enabled": false}` switches it off |
+| `probability` | `1` | Chance (0–1) that a matching message is affected |
+| `max_hits` | `0` (unlimited) | Stop after this many hits. `hits` shows the count. |
+
+`PUT /api/v1/toxics/{name}` replaces a toxic, `GET` inspects it, `DELETE`
+removes it. Toxics are lost on restart.
+
+## Keeping tests isolated
+
+- Use a unique token per test (a UUID in `X-Test-ID`, Message-ID or recipient).
+  A shared address such as the clinic mailbox would hit every test.
+- Remove your toxics in `finally`/defer. Never delete other tests' toxics.
+- Keep one test's messages in their own SMTP transaction and IMAP command. A
+  delay or rejection applies to the whole command it happens in.
+
+There is no global failure switch. `/api/v1/chaos` exists only to return an error.

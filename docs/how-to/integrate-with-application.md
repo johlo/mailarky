@@ -1,30 +1,33 @@
 # Connect an application
 
-Run the service with `docker compose up -d --build --wait`. Applications on the
-Compose network use SMTP `mail-sandbox:1025`, TLS IMAP `mail-sandbox:1993`, and
-HTTP `http://mail-sandbox:8026`. Host applications use `localhost` instead.
+| Setting | Value |
+| --- | --- |
+| SMTP | `mail-sandbox:1025` in Compose, `localhost:1025` from the host. No authentication, no TLS. |
+| IMAP | `mail-sandbox:1993` / `localhost:1993`, implicit TLS |
+| IMAP login | `clinic@example.test` / `local-imap-only` |
+| IMAP trust | Add [`testdata/tls/server.crt`](../../testdata/tls/server.crt) to the client's trusted roots |
+| HTTP API | `http://mail-sandbox:8026` / `http://localhost:8026` |
 
-SMTP accepts unauthenticated test deliveries by default. Configure the sending
-application's SMTP host/port accordingly. Captured deliveries appear immediately
-in `Sent` and through `/api/v1/messages`. Use `MAIL_SANDBOX_SMTP_FOLDER=INBOX` inside
-the server process if your application expects deliveries in INBOX.
+SMTP deliveries are stored in `Sent`. If your application expects them in
+`INBOX`, set `MAIL_SANDBOX_SMTP_FOLDER=INBOX` on the sandbox.
 
-IMAP credentials default to `clinic@example.test` / `local-imap-only`. Install
-`testdata/tls/server.crt` in the client's trust store and connect with implicit
-TLS. Use UID searches/fetches and track UIDVALIDITY. See [IMAP behavior](../reference/imap-behavior.md).
+In the IMAP client, use UID SEARCH and UID FETCH and track UIDVALIDITY. The
+server does not push updates, so poll. See [IMAP behavior](../reference/imap-behavior.md).
 
-Mailpit HTTP clients can point to the shared API on port 8026. The common
-message/search/attachment/tag/read/delete/send/release endpoints retain their
-paths and field casing. [Compatibility](../reference/compatibility.md) lists
-intentional differences. No browser UI is served.
+## Parallel tests
 
-Pin the repository as a submodule or pin a built image. For isolated CI stacks,
-publish distinct host ports while keeping container ports fixed. For concurrent
-tests in one stack, provision [separate accounts](separate-mailboxes.md) or use
-unique addresses / `X-Test-ID` within the default account and
-[message-scoped toxics](toxics.md); set `MP_MAX_MESSAGES=0` to prevent global
-retention from evicting another test's messages. Delete only owned IDs afterward.
+Give each test its own mailbox ([separate mailboxes](separate-mailboxes.md)).
+If tests share the default account instead:
 
-External forwarding/relay is opt-in. Configure it only when the test actually
-needs an outbound SMTP peer; an ordinary capture stack needs no external mail
-credentials. Refer to [configuration](../reference/configuration.md).
+- Use a unique address or `X-Test-ID` header per test, and search by it.
+- Set `MP_MAX_MESSAGES=0`, or retention can evict another test's messages.
+- Delete only the message IDs the test created.
+
+## Pinning
+
+Pin this repository as a Git submodule, or pin a built image. To run several
+stacks side by side, change the published host ports and keep the container
+ports as they are ([run and test](run-and-test.md)).
+
+Outbound relay and forwarding are off by default. A test stack needs no real
+mail credentials.

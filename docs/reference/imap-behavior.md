@@ -1,43 +1,42 @@
 # IMAP behavior
 
-The transport is IMAP4rev1 over implicit TLS (minimum TLS 1.2), using go-imap's
-protocol implementation and this project's shared store. There is a configurable
-default account and API-provisioned independent accounts, each with `INBOX`, `Sent` and `Archive` initially present and subscribed. A different configured SMTP folder is also created at startup.
+IMAP4rev1 over implicit TLS (TLS 1.2 or later) on port 1993. Every account
+starts with `INBOX`, `Sent` and `Archive`.
 
-| Operation | Behavior |
+## Supported commands
+
+| Command | Notes |
 | --- | --- |
-| LOGIN | Selects account by its unique username/password; wrong credentials rejected |
-| LIST/LSUB, SELECT/EXAMINE, STATUS | Inspect shared folders and message counts |
-| SEARCH / UID SEARCH | Header/body/date/flag criteria from the IMAP protocol library |
-| FETCH / UID FETCH | Metadata, raw bodies and MIME sections, with scoped toxics |
-| APPEND | Store MIME with supplied flags and INTERNALDATE |
-| CREATE, DELETE, RENAME | Mutable folders, including hierarchical renames; INBOX cannot be deleted |
-| SUBSCRIBE / UNSUBSCRIBE | Persisted subscription state |
-| STORE / UID STORE | Persisted flags, reflected in HTTP read state |
-| COPY / UID COPY | New message identity and destination UID, preserving raw MIME |
-| EXPUNGE | Removes messages flagged Deleted without reusing UIDs |
+| LOGIN | The username chooses the account |
+| LIST, LSUB, SELECT, EXAMINE, STATUS | |
+| SEARCH, FETCH (and UID variants) | [Toxics](../how-to/toxics.md) may delay, hide or alter results |
+| APPEND | Keeps the supplied flags and INTERNALDATE |
+| STORE | Flags are saved and show up as read/unread in HTTP |
+| COPY | The copy gets a new UID |
+| EXPUNGE | Removes messages flagged `\Deleted` |
+| CREATE, DELETE, RENAME, SUBSCRIBE, UNSUBSCRIBE | `INBOX` cannot be deleted |
 
-Clients should poll using SELECT/STATUS and UID SEARCH/FETCH. Unsolicited mailbox
-updates and IDLE notifications are not implemented. The library's asynchronous
-update dispatcher races with session state, so this service deliberately does not
-use it. Explicit STORE controls Seen flags; body fetches do not implicitly mark
-messages read. HTTP GET of message detail does mark it read. Use BODY.PEEK for
-portable importer behavior and refresh selection after external mutations.
+## Things to rely on
 
-Each folder has its own nonzero random UIDVALIDITY and monotonically increasing
-UIDs. Deletion never shifts existing UIDs. Sequence numbers may change; use UIDs.
-With persistent storage, folder counters/validity survive restart. An in-memory
-restart starts fresh. Message-ID remains a header and duplicates are permitted
-unless `MP_IGNORE_DUPLICATE_IDS=true`.
+- **UIDs never change.** Deleting mail doesn't renumber them. Sequence numbers
+  can change, so use UIDs.
+- **UIDVALIDITY** is random per folder. It changes when in-memory state is lost
+  on restart, and survives restarts when persistence is on.
+- **No push.** IDLE isn't supported, so poll with STATUS or UID SEARCH.
+- **Reading doesn't mark as read** over IMAP. Only STORE does. The HTTP message
+  detail endpoint *does* mark as read.
 
-SMTP deliveries default to `Sent`; HTTP fixtures default to `INBOX`. They use the
-same store, so no copy/mirroring process is required. Raw SMTP/APPEND MIME remains
-unchanged in storage. Bcc recipients available only in an SMTP envelope are
-included in HTTP metadata; they are not injected into the raw MIME or IMAP envelope.
+## Where mail comes from
 
-Date comes from the message header. SMTP and raw HTTP imports use receipt time
-for INTERNALDATE; IMAP APPEND can supply its own timestamp. For `/messages`
-fixtures, INTERNALDATE defaults to `date` (now if omitted), with `internal_date`
-as an explicit override. HTTP Created is always ingestion time.
-Toxics operate on selected message snapshots, outside storage locks; see
-[the isolation rules](../how-to/toxics.md).
+| Source | Folder | INTERNALDATE |
+| --- | --- | --- |
+| SMTP | `Sent` (configurable) | Arrival time |
+| `POST /messages` | `INBOX` unless `folder` is given | `internal_date`, else `date`, else now |
+| Raw import | The `folder` parameter | Arrival time |
+| IMAP APPEND | Target folder | As supplied |
+
+All sources share one store, so HTTP and IMAP always see the same messages.
+Raw MIME is stored unchanged. Bcc recipients known only from the SMTP envelope
+appear in HTTP metadata, not in the MIME.
+
+Duplicate Message-IDs are allowed unless `MP_IGNORE_DUPLICATE_IDS=true`.

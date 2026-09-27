@@ -1,198 +1,147 @@
-# Configuration reference
+# Configuration
 
-Load defaults, then `MAIL_SANDBOX_CONFIG` YAML, then environment variables, then
-command-line flags. Unknown YAML fields and CLI flags fail startup. Flags use
-Go syntax (`--flag=value` for booleans). The YAML keys below are the supported
-configuration contract; the MP-prefixed environment variables ease migration.
+The defaults suit most test stacks, so you usually need nothing here.
+
+Settings are applied in this order, later ones winning: defaults, the YAML file
+named by `MAIL_SANDBOX_CONFIG`, environment variables, command-line flags.
+Unknown YAML keys and flags stop startup.
 
 ## Defaults
 
-SMTP `:1025`, TLS IMAP `:1993`, HTTP `:8026`. All process listeners bind to all
-interfaces; Compose publishes them only on loopback. IMAP account:
-`clinic@example.test` / `local-imap-only`. Initial folders: INBOX, Sent, Archive
-and the configured SMTP folder if different;
-SMTP captures in Sent. Auth is disabled on SMTP/HTTP. Outbound delivery is disabled.
-Message storage is in memory; retain at most 500 messages, no age limit, 50 MiB
-maximum raw message size. Webhook minimum interval is 1 second.
+| | |
+| --- | --- |
+| Ports | SMTP 1025, IMAP 1993 (TLS), HTTP 8026 |
+| Default account | `clinic@example.test` / `local-imap-only`, folders `INBOX`, `Sent`, `Archive` |
+| SMTP deliveries | Stored in `Sent` |
+| Authentication | None on SMTP or HTTP |
+| Storage | In memory, at most 500 messages, 50 MiB per message |
+| Outbound mail | Disabled |
 
 ## Settings
 
-| YAML key | CLI flag | Environment |
+Each row lists the YAML key, then the flag and environment variable.
+
+### Listeners and accounts
+
+| YAML | Flag / environment | Purpose |
 | --- | --- | --- |
-| `smtp` | `--smtp` | `MP_SMTP_BIND_ADDR` |
-| `imap` | `--imap` | `MAIL_SANDBOX_IMAP_BIND_ADDR` |
-| `http` | `--listen` | `MP_UI_BIND_ADDR` |
-| `cert` | `--imap-tls-cert` | `MAIL_SANDBOX_IMAP_CERT` |
-| `key` | `--imap-tls-key` | `MAIL_SANDBOX_IMAP_KEY` |
-| `imap_username` | `--imap-username` | `MAIL_SANDBOX_IMAP_USERNAME` |
-| `imap_password` | `--imap-password` | `MAIL_SANDBOX_IMAP_PASSWORD` |
-| `smtp_folder` | `--smtp-folder` | `MAIL_SANDBOX_SMTP_FOLDER` |
-| `smtp_tls` | `--smtp-tls-mode` | `MAIL_SANDBOX_SMTP_TLS_MODE` |
-| `smtp_cert` | `--smtp-tls-cert` | `MP_SMTP_TLS_CERT` |
-| `smtp_key` | `--smtp-tls-key` | `MP_SMTP_TLS_KEY` |
-| `require_tls` | `--smtp-require-starttls` | `MP_SMTP_REQUIRE_STARTTLS` |
-| `smtp_require_tls` | `--smtp-require-tls` | `MP_SMTP_REQUIRE_TLS` |
-| `smtp_auth_file` | `--smtp-auth-file` | `MP_SMTP_AUTH_FILE` |
-| `smtp_accept_any` | `--smtp-auth-accept-any` | `MP_SMTP_AUTH_ACCEPT_ANY` |
-| `smtp_allow_insecure_auth` | `--smtp-auth-allow-insecure` | `MP_SMTP_AUTH_ALLOW_INSECURE` |
-| `http_auth_file` | `--ui-auth-file` | `MP_UI_AUTH_FILE` |
-| `http_cert` | `--ui-tls-cert` | `MP_UI_TLS_CERT` |
-| `http_key` | `--ui-tls-key` | `MP_UI_TLS_KEY` |
-| `send_auth_file` | `--send-api-auth-file` | `MP_SEND_API_AUTH_FILE` |
-| `send_accept_any` | `--send-api-auth-accept-any` | `MP_SEND_API_AUTH_ACCEPT_ANY` |
-| `database` | `--database` | `MP_DATABASE` |
-| `max_messages` | `--max` | `MP_MAX_MESSAGES` |
-| `ignore_duplicate_ids` | `--ignore-duplicate-ids` | `MP_IGNORE_DUPLICATE_IDS` |
-| `enable_chaos` | `--enable-chaos` | `MP_ENABLE_CHAOS` |
-| `chaos_triggers` | `--chaos-triggers` | `MP_CHAOS_TRIGGERS` |
-| `webhook_url` | `--webhook-url` | `MP_WEBHOOK_URL` |
-| `webhook_delay` | `--webhook-delay` | `MP_WEBHOOK_DELAY` |
-| `webhook_interval` | `--webhook-limit` | `MP_WEBHOOK_LIMIT` |
-| `label` | `--label` | `MP_LABEL` |
-| `tags_disable` | `--tags-disable` | `MP_TAGS_DISABLE` |
-| `tags_title_case` | `--tags-title-case` | `MP_TAGS_TITLE_CASE` |
-| `tags_username` | `--tags-username` | `MP_TAGS_USERNAME` |
-| `tags_config` | `--tags-config` | `MP_TAGS_CONFIG` |
-| `tag` | `--tag` | `MP_TAG` |
-| `relay_all` | `--smtp-relay-all` | `MP_SMTP_RELAY_ALL` |
-| `relay_matching` | `--smtp-relay-matching` | `MP_SMTP_RELAY_MATCHING` |
-| `spamassassin` | `--spamassassin` | `MP_SPAMASSASSIN` |
-| `allow_internal_http_requests` | `--allow-internal-http-requests` | `MP_ALLOW_INTERNAL_HTTP_REQUESTS` |
-| `block_remote_css_and_fonts` | `--block-remote-css-and-fonts` | `MP_BLOCK_REMOTE_CSS_AND_FONTS` |
-| `enable_prometheus` | `--enable-prometheus` | `MP_ENABLE_PROMETHEUS` |
-| `webroot` | `--webroot` | `MP_WEBROOT` |
-| `api_cors` | `--api-cors` | `MP_API_CORS` |
-| `allowed_hosts` | `--allowed-hosts` | `MP_ALLOWED_HOSTS` |
-| `dump_path` | `--dump-path` | `MP_DUMP_PATH` |
-| `max_age` | `--max-age` | `MP_MAX_AGE` |
-| `max_message_bytes` | `--max-message-size` | `MP_MAX_MESSAGE_SIZE` |
-| `smtp_auth` | — | `MP_SMTP_AUTH` |
-| `http_auth` | — | `MP_UI_AUTH` |
-| `send_auth` | — | `MP_SEND_API_AUTH` |
+| `smtp` | `--smtp` / `MP_SMTP_BIND_ADDR` | SMTP listen address |
+| `imap` | `--imap` / `MAIL_SANDBOX_IMAP_BIND_ADDR` | IMAP listen address |
+| `http` | `--listen` / `MP_UI_BIND_ADDR` | HTTP listen address |
+| `cert`, `key` | `--imap-tls-cert`, `--imap-tls-key` / `MAIL_SANDBOX_IMAP_CERT`, `_KEY` | IMAP certificate |
+| `imap_username`, `imap_password` | `--imap-username`, `--imap-password` / `MAIL_SANDBOX_IMAP_USERNAME`, `_PASSWORD` | Default account login |
+| `smtp_folder` | `--smtp-folder` / `MAIL_SANDBOX_SMTP_FOLDER` | Folder for SMTP deliveries |
 
-`MAIL_SANDBOX_SMTP_PORT`, `MAIL_SANDBOX_IMAP_PORT`, and `MAIL_SANDBOX_HTTP_PORT` also
-set process listener ports; explicit bind-address variables/flags take precedence.
-In the supplied Compose file these variables override **host publication** only.
-Set service `environment` entries or mount a YAML config for container settings.
+`MAIL_SANDBOX_SMTP_PORT`, `_IMAP_PORT` and `_HTTP_PORT` set the process ports.
+In `compose.yaml` they set only the published host ports.
 
-### Previous environment names
+### Storage
 
-The earlier names remain aliases. Prefer the `MAIL_SANDBOX_*` names above;
-when both are supplied the new name wins. Explicit bind addresses still override
-port-only settings, and command-line flags override environment settings.
+| YAML | Flag / environment | Purpose |
+| --- | --- | --- |
+| `database` | `--database` / `MP_DATABASE` | bbolt file; enables persistence |
+| `max_messages` | `--max` / `MP_MAX_MESSAGES` | Per-account limit (500; `0` = unlimited) |
+| `max_age` | `--max-age` / `MP_MAX_AGE` | Delete mail older than this (e.g. `24h`) |
+| `max_message_bytes` | `--max-message-size` / `MP_MAX_MESSAGE_SIZE` | Size limit (bytes in YAML, MiB otherwise) |
+| `ignore_duplicate_ids` | `--ignore-duplicate-ids` / `MP_IGNORE_DUPLICATE_IDS` | Drop repeated Message-IDs |
+| `dump_path` | `--dump-path` / `MP_DUMP_PATH` | Also write each message as an `.eml` file |
 
-| Previous name | Current name |
-| --- | --- |
-| `MAIL_EMULATOR_CONFIG` | `MAIL_SANDBOX_CONFIG` |
-| `SMTP_EMULATOR_PORT` | `MAIL_SANDBOX_SMTP_PORT` |
-| `IMAP_EMULATOR_PORT` | `MAIL_SANDBOX_IMAP_PORT` |
-| `IMAP_EMULATOR_HTTP_PORT` | `MAIL_SANDBOX_HTTP_PORT` |
-| `IMAP_EMULATOR_BIND_ADDR` | `MAIL_SANDBOX_IMAP_BIND_ADDR` |
-| `IMAP_EMULATOR_CERT` | `MAIL_SANDBOX_IMAP_CERT` |
-| `IMAP_EMULATOR_KEY` | `MAIL_SANDBOX_IMAP_KEY` |
-| `IMAP_EMULATOR_USERNAME` | `MAIL_SANDBOX_IMAP_USERNAME` |
-| `IMAP_EMULATOR_PASSWORD` | `MAIL_SANDBOX_IMAP_PASSWORD` |
-| `SMTP_EMULATOR_FOLDER` | `MAIL_SANDBOX_SMTP_FOLDER` |
-| `SMTP_EMULATOR_TLS_MODE` | `MAIL_SANDBOX_SMTP_TLS_MODE` |
+### SMTP TLS and authentication
 
-The smoke script also accepts `IMAP_EMULATOR_HTTP_URL` as an alias for
-`MAIL_SANDBOX_HTTP_URL`. Existing `MP_*` settings retain their names.
+| YAML | Flag / environment | Purpose |
+| --- | --- | --- |
+| `smtp_cert`, `smtp_key` | `--smtp-tls-cert`, `--smtp-tls-key` / `MP_SMTP_TLS_CERT`, `_KEY` | Enables optional STARTTLS |
+| `smtp_tls` | `--smtp-tls-mode` / `MAIL_SANDBOX_SMTP_TLS_MODE` | `starttls` or `tls` (may reuse the IMAP certificate) |
+| `require_tls` | `--smtp-require-starttls` / `MP_SMTP_REQUIRE_STARTTLS` | Require STARTTLS |
+| `smtp_require_tls` | `--smtp-require-tls` / `MP_SMTP_REQUIRE_TLS` | Implicit TLS |
+| `smtp_auth_file` | `--smtp-auth-file` / `MP_SMTP_AUTH_FILE` | Credentials file |
+| `smtp_auth` | `MP_SMTP_AUTH` | Inline credentials |
+| `smtp_accept_any` | `--smtp-auth-accept-any` / `MP_SMTP_AUTH_ACCEPT_ANY` | Accept any credentials, or none |
+| `smtp_allow_insecure_auth` | `--smtp-auth-allow-insecure` / `MP_SMTP_AUTH_ALLOW_INSECURE` | Allow AUTH without TLS |
 
-`max_message_bytes` is bytes in YAML; `--max-message-size` and
-`MP_MAX_MESSAGE_SIZE` use MiB. `max_messages: 0` is unlimited. Duration flags/YAML
-use Go duration strings (`500ms`, `5m`, `24h`); MP_WEBHOOK_DELAY and
-MP_WEBHOOK_LIMIT use integer seconds. MP_MAX_AGE uses a duration string.
+### HTTP
 
-`enable_chaos`/`chaos_triggers` and their MP aliases are recognized only to reject
-global failures. Use [message-scoped toxics](../how-to/toxics.md).
+| YAML | Flag / environment | Purpose |
+| --- | --- | --- |
+| `http_cert`, `http_key` | `--ui-tls-cert`, `--ui-tls-key` / `MP_UI_TLS_CERT`, `_KEY` | HTTPS |
+| `http_auth_file`, `http_auth` | `--ui-auth-file` / `MP_UI_AUTH_FILE`, `MP_UI_AUTH` | Basic auth |
+| `send_auth_file`, `send_auth` | `--send-api-auth-file` / `MP_SEND_API_AUTH_FILE`, `MP_SEND_API_AUTH` | Separate auth for `/api/v1/send` |
+| `send_accept_any` | `--send-api-auth-accept-any` / `MP_SEND_API_AUTH_ACCEPT_ANY` | Accept any send credentials |
+| `webroot` | `--webroot` / `MP_WEBROOT` | Path prefix for all routes |
+| `api_cors` | `--api-cors` / `MP_API_CORS` | Allowed CORS origins |
+| `allowed_hosts` | `--allowed-hosts` / `MP_ALLOWED_HOSTS` | Allowed `Host` headers |
+| `enable_prometheus` | `--enable-prometheus` / `MP_ENABLE_PROMETHEUS` | Serve `/metrics` |
 
-## TLS and authentication
+Health probes skip authentication. If you change `webroot` or enable HTTPS,
+update the Docker health check too.
 
-IMAP always uses implicit TLS with the configured cert/key; the container bundles
-public test fixtures in `/certs`. `make run` uses `testdata/tls` instead.
-Certificates contain localhost, 127.0.0.1 and mail-sandbox names.
+### Notifications, tags and checks
 
-For SMTP, supplying an SMTP cert/key enables optional STARTTLS. Require it with
-`--smtp-require-starttls` / MP_SMTP_REQUIRE_STARTTLS. For implicit TLS use
-`--smtp-require-tls` / MP_SMTP_REQUIRE_TLS, or `smtp_tls: tls`. The two required
-modes are mutually exclusive. Explicit `smtp_tls: starttls`/`tls` can reuse the
-IMAP certificate. HTTP TLS requires both http_cert and http_key.
+| YAML | Flag / environment | Purpose |
+| --- | --- | --- |
+| `webhook_url` | `--webhook-url` / `MP_WEBHOOK_URL` | POST a summary of each new message |
+| `webhook_delay`, `webhook_interval` | `--webhook-delay`, `--webhook-limit` / `MP_WEBHOOK_DELAY`, `MP_WEBHOOK_LIMIT` | Delay and minimum interval (seconds in env) |
+| `label` | `--label` / `MP_LABEL` | Sent as the `Mailpit-Label` webhook header |
+| `tags_disable` | `--tags-disable` / `MP_TAGS_DISABLE` | `x-tags`, `plus-addresses` |
+| `tags_config`, `tag` | `--tags-config`, `--tag` / `MP_TAGS_CONFIG`, `MP_TAG` | Automatic tagging rules |
+| `tags_username`, `tags_title_case` | `--tags-username`, `--tags-title-case` / `MP_TAGS_USERNAME`, `MP_TAGS_TITLE_CASE` | Tag by SMTP username; title-case tags |
+| `spamassassin` | `--spamassassin` / `MP_SPAMASSASSIN` | spamd `host:port` |
+| `allow_internal_http_requests` | `--allow-internal-http-requests` / `MP_ALLOW_INTERNAL_HTTP_REQUESTS` | Let link/CSS checks reach private addresses |
+| `block_remote_css_and_fonts` | `--block-remote-css-and-fonts` / `MP_BLOCK_REMOTE_CSS_AND_FONTS` | Don't fetch external stylesheets |
 
-Credential files contain `username:password` lines, blank/comment lines ignored.
-Passwords can be plaintext test credentials or bcrypt hashes. Inline MP_*_AUTH
-variables contain space-separated username:password pairs and are not available
-as CLI flags. SMTP accepts PLAIN and LOGIN. Authentication over plaintext SMTP
-requires the explicit allow-insecure option. SMTP accept-any allows arbitrary
-credentials or no AUTH; otherwise configured SMTP credentials are required.
+Durations in YAML and flags use Go syntax (`500ms`, `24h`). Boolean flags use
+`--flag=value`.
 
-HTTP uses Basic auth when configured. Send credentials override general HTTP
-auth for `/api/v1/send`; send-api-auth-accept-any accepts any supplied Basic
-credentials. Health probes bypass auth. Create independent mailbox accounts through `/api/v1/mailboxes`. Their IMAP
-credentials are separate from server-wide SMTP and HTTP authentication; scoped
-HTTP access still uses the configured service credentials.
+## Credentials
+
+Credential files hold one `username:password` per line, as plain text or a
+bcrypt hash. Inline `MP_*_AUTH` variables take space-separated pairs. SMTP
+supports PLAIN and LOGIN.
+
+Accounts created through `/api/v1/mailboxes` have their own IMAP credentials.
+They use the server-wide SMTP and HTTP settings above.
 
 ## Relay and forwarding
 
-Set nested YAML `relay` / `forward` objects, or MP_SMTP_RELAY_CONFIG /
-MP_SMTP_FORWARD_CONFIG to separate YAML files. Each supports:
+Off by default. **Relay** delivers captured mail onward, either when you call
+`/release` or automatically (`relay_all` / `relay_matching`). **Forwarding**
+copies every message to fixed addresses. Configure them with nested `relay` /
+`forward` YAML, or a separate YAML file named by `MP_SMTP_RELAY_CONFIG` /
+`MP_SMTP_FORWARD_CONFIG`:
 
 ```yaml
-host: localhost
-port: 2525
+host: smtp.example.test
+port: 25                    # default
 auth: none                  # none, plain, login, cram-md5
 username: ''
 password: ''
 secret: ''                  # CRAM-MD5 secret
-starttls: false
+starttls: false             # starttls and tls are mutually exclusive
 tls: false
-allow-insecure: false       # explicitly skip outbound TLS verification
+allow-insecure: false       # skip TLS verification
 return-path: ''
 override-from: ''
-allowed-recipients: ''      # regex, manual release
-blocked-recipients: ''      # regex, any delivery
-preserve-message-ids: false # manual release normally generates a fresh ID
-forward-smtp-errors: false
-# Forward config additionally uses:
-to: copy@example.test       # comma-separated envelope recipients
+allowed-recipients: ''      # regex, for manual release
+blocked-recipients: ''      # regex, always applied
+preserve-message-ids: false
+forward-smtp-errors: false  # return delivery failures to the SMTP client
+to: copy@example.test       # forwarding only
 ```
 
-Each field also has an MP_SMTP_RELAY_* / MP_SMTP_FORWARD_* environment alias
-using uppercase and underscores. `forward-smtp-errors` uses `FWD_SMTP_ERRORS`.
-Port defaults to 25. STARTTLS and implicit TLS are mutually exclusive.
-Automatic relay requires relay_all or relay_matching (mutually exclusive).
-Forwarding requires a host and `to`. Captured originals remain unchanged. Do not
-configure a relay/forward destination that loops back into this same service.
+Every key also has an `MP_SMTP_RELAY_*` / `MP_SMTP_FORWARD_*` variable
+(uppercase, underscores). Don't point relay or forwarding back at the sandbox.
 
-## Tagging and diagnostics
+## Previous environment names
 
-X-Tags and plus-address tags are enabled by default. Disable either using
-`tags_disable: x-tags,plus-addresses`. `tags_config` points to YAML with
-`filters: [{match: 'to:patient@example.test', tags: 'Patient, Test'}]`.
-Inline `filters` is also supported. `--tag` / MP_TAG uses shell-like quoted
-`tag=match` expressions; no shell expansion is performed. Username/title casing
-and API tag mutation are independent options.
+Names from the `imap-emulator` era still work. The new name wins if both are set.
 
-Link checking and remote CSS requests block private/loopback addresses by default,
-including DNS results and redirects. Explicitly enable allow_internal_http_requests
-for local fixtures. block_remote_css_and_fonts disables external stylesheet loads.
-The HTML checker loads at most ten external link stylesheets; nested CSS imports
-and fonts are not downloaded. SpamAssassin needs a spamd host:port.
+| Old | New |
+| --- | --- |
+| `MAIL_EMULATOR_CONFIG` | `MAIL_SANDBOX_CONFIG` |
+| `SMTP_EMULATOR_PORT`, `IMAP_EMULATOR_PORT`, `IMAP_EMULATOR_HTTP_PORT` | `MAIL_SANDBOX_SMTP_PORT`, `_IMAP_PORT`, `_HTTP_PORT` |
+| `IMAP_EMULATOR_BIND_ADDR`, `_CERT`, `_KEY`, `_USERNAME`, `_PASSWORD` | `MAIL_SANDBOX_IMAP_*` equivalents |
+| `SMTP_EMULATOR_FOLDER`, `SMTP_EMULATOR_TLS_MODE` | `MAIL_SANDBOX_SMTP_FOLDER`, `_SMTP_TLS_MODE` |
+| `IMAP_EMULATOR_HTTP_URL` (smoke script) | `MAIL_SANDBOX_HTTP_URL` |
 
-`dump_path` writes best-effort .eml copies after capture; failures are logged and
-never cause a committed message to be rejected. `webhook_url` posts message
-summaries, using Basic auth from URL credentials if supplied. Delay and interval
-apply to the bounded in-memory webhook worker, with three attempts per message.
-`label` is included in the Mailpit-Label webhook header.
-
-`webroot` prefixes API routes, `api_cors` accepts comma-separated origins,
-`allowed_hosts` accepts comma-separated hostnames. Prometheus metrics are exposed
-at /metrics only when enabled. The Docker health probe assumes the default
-HTTP path/port; override it when changing webroot or enabling HTTPS.
-
-## Provisioned accounts
-
-The default account remains configurable above. Runtime accounts are created via
-`POST /api/v1/mailboxes` and inherit listener, auth, retention and outbound delivery
-settings. Each has a separate store, folders, UID space, toxic registry and queues.
-Persistent account metadata lives in MP_DATABASE; data files live in the sibling
-`MP_DATABASE.mailboxes/` directory. See [separate mailboxes](../how-to/separate-mailboxes.md).
+`enable_chaos` and `chaos_triggers` are accepted only to fail with an error.
+Use [toxics](../how-to/toxics.md) instead.

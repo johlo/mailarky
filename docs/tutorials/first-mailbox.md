@@ -1,7 +1,8 @@
 # Your first shared mailbox
 
-This tutorial uses Docker Compose, curl and Python 3's standard library. Start
-from a clone of this repository and run commands from its root.
+You'll send one message over SMTP and then find the same message through
+HTTP and IMAP. You need Docker, curl and Python 3. Run the commands from the
+repository root.
 
 ## Start the service
 
@@ -10,7 +11,7 @@ docker compose up -d --build --wait
 curl -fsS http://localhost:8026/healthz
 ```
 
-Expect `ok`. If ports are occupied, see [host port overrides](../how-to/run-and-test.md).
+Expect `ok`. If a port is taken, see [run and test](../how-to/run-and-test.md).
 
 ## Send one message over SMTP
 
@@ -37,8 +38,7 @@ curl -fsS 'http://localhost:8026/api/v1/search?query=message-id:tutorial@example
 curl -fsS http://localhost:8026/api/v1/message/latest/raw
 ```
 
-The search contains a message with `Folder: Sent`. Its database `ID` differs
-from the `MessageID` header and the numeric IMAP `UID`.
+The message is in `Sent`, the folder where SMTP deliveries go.
 
 ## Read it with verified TLS IMAP
 
@@ -57,7 +57,7 @@ with imaplib.IMAP4_SSL('localhost', 1993, ssl_context=context) as imap:
 PYTHON
 ```
 
-The returned MIME is the SMTP delivery. No copying job is involved.
+IMAP returns the exact bytes that SMTP received.
 
 ## Add incoming history
 
@@ -65,7 +65,10 @@ The returned MIME is the SMTP delivery. No copying job is involved.
 curl -fsS http://localhost:8026/messages -H 'Content-Type: application/json'   -d '{"from":"patient@example.test","to":["clinic@example.test"],"subject":"An older reply","date":"2020-01-02T03:04:05Z"}'
 ```
 
-This appears in `INBOX`. HTTP `Created` records ingestion now; the Date header
-is historical. Stop with `docker compose down`; default in-memory mail is lost.
-Next, [give each test its own mailbox](../how-to/separate-mailboxes.md) or try
-[a failure scoped to one test](../how-to/toxics.md).
+Fixtures go to `INBOX` and keep the date you give them. Your application can
+now import this history over IMAP.
+
+Stop with `docker compose down`. In-memory mail is lost.
+
+Next: [give each test its own mailbox](../how-to/separate-mailboxes.md) or
+[make one delivery fail](../how-to/toxics.md).

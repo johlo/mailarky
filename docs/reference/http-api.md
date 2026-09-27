@@ -1,89 +1,74 @@
-# HTTP API reference
+# HTTP API
 
-Default base URL `http://localhost:8026`. The complete machine-readable contract
-is [openapi.yaml](../../openapi.yaml). Authentication/TLS, webroot, CORS and host
-restrictions are optional; see [configuration](configuration.md).
+Base URL `http://localhost:8026`. The full contract is [openapi.yaml](../../openapi.yaml).
 
-Create/list accounts at `POST/GET /api/v1/mailboxes`; inspect/delete at
-`GET/DELETE /api/v1/mailboxes/{id}`. Creation returns credentials once and an
-`api_base` such as `/mailboxes/{id}`. Prefix any data/toxic endpoint below with
-that base to operate on the account. Root paths address default only. See
-[separate mailboxes](../how-to/separate-mailboxes.md) for the lifecycle contract.
+Paths address the default account. For a [separate mailbox](../how-to/separate-mailboxes.md),
+prefix them with its `api_base`, e.g. `/mailboxes/{id}/api/v1/messages`.
 
-## Endpoints
+## Common endpoints
 
-| Method / path | Purpose |
+| Endpoint | Purpose |
 | --- | --- |
-| GET /, /healthz, /livez, /readyz | Service metadata / health |
-| GET /api/v1/messages, /api/v1/search | Paginated messages, newest ingestion first |
-| PUT /api/v1/messages | Set Read for IDs or Search, or all if neither provided |
-| DELETE /api/v1/messages | Delete IDs; absent/empty IDs deletes all |
-| DELETE /api/v1/search | Delete a required nonempty query |
-| GET /api/v1/message/{id} | Detail, decoded Text/HTML; marks read |
-| GET /api/v1/message/{id}/headers | Header map of arrays |
-| GET /api/v1/message/{id}/raw | Original MIME bytes |
-| GET /api/v1/message/{id}/part/{part} | Decoded attachment/inline bytes |
-| GET /api/v1/message/{id}/part/{part}/thumb | PNG thumbnail, max 320px dimensions |
-| POST /api/v1/message/{id}/release | Deliver through configured relay to To recipients |
-| GET /api/v1/message/{id}/link-check | Validate links; optional follow=true |
-| GET /api/v1/message/{id}/html-check | HTML/CSS compatibility analysis |
-| GET /api/v1/message/{id}/sa-check | Configured SpamAssassin report |
-| POST /api/v1/send | Compose/capture JSON Text/HTML, headers, tags and base64 attachments |
-| POST /api/v1/messages/raw?folder=INBOX | Import MIME bytes |
-| POST /messages | Convenient historical plain-text fixture |
-| GET/PUT /api/v1/tags | List tags / replace tags for IDs |
-| PUT/DELETE /api/v1/tags/{tag} | Rename with Name / remove globally |
-| GET /api/v1/info, /api/v1/webui | Store/runtime metadata / headless capabilities |
-| GET /api/events | WebSocket new/update/delete notifications |
-| GET /metrics | Optional Prometheus metrics |
-| GET/POST /api/v1/folders | List folders / create with name |
-| GET/POST /api/v1/toxics | List / create scoped toxics |
-| GET/PUT/PATCH/DELETE /api/v1/toxics/{name} | Inspect / replace / enable-disable / delete |
-| GET/PUT /api/v1/chaos | Disabled metadata / explicit 400 rejection |
-| GET /view/{id}.html or .txt | Message body; HTML is sandboxed, no mail client UI |
+| `GET /api/v1/search?query=…` | Find messages (newest first) |
+| `GET /api/v1/messages` | List messages (newest first) |
+| `GET /api/v1/message/{id}` | Details: headers, decoded Text/HTML, attachments. Marks it read. |
+| `GET /api/v1/message/{id}/raw` | Original MIME |
+| `POST /messages` | Add a fixture ([seed test data](../how-to/seed-test-scenarios.md)) |
+| `DELETE /api/v1/messages` | Delete `{"IDs": [...]}`. **An empty list deletes all.** |
+| `POST/GET /api/v1/mailboxes` | Create or list accounts |
+| `DELETE /api/v1/mailboxes/{id}` | Delete an account |
+| `/api/v1/toxics[/{name}]` | Manage [toxics](../how-to/toxics.md) |
 
-Message endpoints accept database UUIDs or `latest`. List responses use
-`messages`, `start`, `total`, `unread`, `messages_count`, `messages_unread`, `tags`.
-Individual message fields retain uppercase Mailpit-style casing, including ID,
-MessageID, From/To/Cc/Bcc/ReplyTo, Subject, Created, Size, Tags, Read, and Username.
-The additional MailboxID, Folder and UID fields identify the IMAP record. Detail adds Date,
-Text, HTML, Inline, Attachments, ReturnPath and ListUnsubscribe. Attachments expose
-PartID, FileName, ContentType, ContentID, Size and MD5/SHA1/SHA256 Checksums.
+`{id}` is the message's UUID, or `latest`.
+
+## All endpoints
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /`, `/healthz`, `/livez`, `/readyz` | Service info and health |
+| `PUT /api/v1/messages` | Mark read/unread by `IDs` or `Search` (all if neither) |
+| `DELETE /api/v1/search?query=…` | Delete matches (query required) |
+| `GET /api/v1/message/{id}/headers` | Headers as a map of arrays |
+| `GET /api/v1/message/{id}/part/{part}[/thumb]` | Attachment bytes, or a PNG thumbnail |
+| `GET /api/v1/message/{id}/link-check` | Check links (`follow=true` to follow redirects) |
+| `GET /api/v1/message/{id}/html-check` | HTML/CSS email client compatibility |
+| `GET /api/v1/message/{id}/sa-check` | SpamAssassin report (if configured) |
+| `POST /api/v1/message/{id}/release` | Deliver through the configured relay |
+| `POST /api/v1/send` | Build and store a message from JSON |
+| `POST /api/v1/messages/raw?folder=…` | Import raw MIME |
+| `GET/PUT /api/v1/tags`, `PUT/DELETE /api/v1/tags/{tag}` | List, set, rename and remove tags |
+| `GET/POST /api/v1/folders` | List or create folders |
+| `GET /api/v1/info` | Store and runtime info |
+| `GET /api/events` | WebSocket stream of new, updated and deleted messages |
+| `GET /metrics` | Prometheus metrics (if enabled) |
+| `GET /view/{id}.html`, `.txt` | Message body |
 
 ## Search
 
-Queries combine words/quoted phrases with AND; prefix a term with `!` or `-` to
-negate it. Supported filters: from, to, cc, bcc, reply-to, addressed, subject,
-message-id, tag, username, folder, body; is:read/unread/tagged; has:attachment/inline;
-larger/smaller (bytes, K/KB, M/MB); before/after (ISO or YYYY/MM/DD, optionally time).
-Date filters use ingestion time. `tz` chooses an IANA timezone (UTC default).
-`start` defaults to 0; `limit` defaults to 50, maximum 10000. Filters ignore case
-for text matching; malformed queries return 400. URL-encode query strings.
+```
+to:alice@example.test subject:"appointment" !is:read after:2024-01-01
+```
 
-## Fixture body
+- Terms are combined with AND. Quote phrases. Prefix `!` or `-` to negate.
+- Filters: `from`, `to`, `cc`, `bcc`, `reply-to`, `addressed`, `subject`,
+  `message-id`, `tag`, `username`, `folder`, `body`, `is:read|unread|tagged`,
+  `has:attachment|inline`, `larger:`/`smaller:` (e.g. `2MB`), `before:`/`after:`.
+- Dates refer to arrival time. Pass `tz` to choose a time zone (default UTC).
+- Paging: `start` (default 0), `limit` (default 50, max 10000).
+- Matching ignores case. Invalid queries return 400. URL-encode the query.
 
-`POST /messages` accepts at most 1 MiB JSON. Required: from and at least one
-recipient in to/cc/bcc arrays. Optional: folder (INBOX), subject, message_id
-(generated if absent), date (now), internal_date (date), body, flags. Header fields
-reject newlines. Addresses allow display names. Date values are RFC3339. Folder
-must exist. The 201 response contains folder and message_id. It preserves the
-original fixture contract; use raw import or send for custom headers/attachments.
+## Message fields
 
-## Sending and mutation
+List results contain `messages`, `total` and `unread`. Each message has `ID`,
+`MessageID`, `From`, `To`, `Cc`, `Bcc`, `ReplyTo`, `Subject`, `Created`
+(arrival time), `Size`, `Tags`, `Read`, plus `MailboxID`, `Folder` and `UID`.
+Details add `Date`, `Text`, `HTML`, `Inline` and `Attachments`.
 
-`POST /api/v1/send` accepts From {Name,Email}, To/Cc/ReplyTo arrays of that shape,
-Bcc strings, Subject, Text, HTML, Headers (string map), Tags and Attachments
-[{Filename,ContentType,ContentID,Content(base64)}]. At least one recipient is
-required. A successful response has ID and MessageID. Capture may optionally
-relay/forward if configured. It does not execute SMTP toxics; those act on SMTP.
+`ID` (a UUID), `MessageID` (the header) and `UID` (IMAP) are different
+identifiers. Don't mix them up.
 
-Read mutation uses {IDs:[...],Read:true} or {Search:"...",Read:false}. Tags use
-{IDs:[...],Tags:[...]}; rename uses {Name:"..."}. Delete uses {IDs:[...]}. Never
-omit ownership IDs in shared concurrent tests. Global tag operations likewise
-require test-owned tag names.
+## Errors
 
-Most errors are plain text and use 400 for validation, 401 for authentication,
-404 for missing resources and 500 for storage failures. Send errors use JSON
-{Error:...}; external delivery failure returns 502 after capture. JSON decoding
-rejects unknown fields and trailing values. See [toxics](../how-to/toxics.md) for
-failure configuration and [compatibility](compatibility.md) for differences.
+400 validation, 401 authentication, 404 not found, 500 storage. Unknown JSON
+fields are rejected. `POST /api/v1/send` returns JSON `{"Error": …}` and uses
+502 when onward delivery fails after the message was stored.

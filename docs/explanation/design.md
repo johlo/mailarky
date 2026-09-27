@@ -1,61 +1,47 @@
-# Shared storage and test isolation
+# Design
 
-`cmd/mail-sandbox` handles process signals and passes arguments to
-`internal/sandbox.Run`. The internal package owns configuration, command
-dispatch, listener lifecycles and mailbox behavior. Its tests live alongside the
-implementation; the repository root holds build configuration and API contracts.
+## One store per account
 
-Each account has a store shared by SMTP, IMAP and HTTP. A manager owns only the
-account catalog and exact SMTP recipient bindings. Each account has independent
-folders, credentials, persistence, retention, notifications and toxics. SMTP DATA parses the MIME,
-checks matching toxics and commits a message to the configured folder. HTTP
-fixtures, raw imports, JSON sending and IMAP APPEND use the same append path.
-HTTP and IMAP therefore observe one identity, one raw message and one flag/tag
-state. Incoming historical fixtures and outgoing app deliveries coexist.
+```
+SMTP ──┐
+HTTP ──┼──▶ account store (raw MIME + flags + tags) ──▶ IMAP / HTTP reads
+IMAP ──┘      APPEND
+```
 
-Raw MIME is preserved. Parsed headers, decoded bodies and attachment metadata
-are derived for HTTP inspection and reconstructed from raw MIME on database
-startup. HTTP IDs are UUIDs; IMAP UIDs are monotonically allocated per folder;
-Message-ID is user-supplied message metadata. These identities serve different
-purposes and must not be substituted for one another.
+Every way of adding mail goes through the same append path into the account's
+store. HTTP and IMAP therefore see the same message, the same raw bytes and the
+same flags. Nothing is copied or synced between protocols.
 
-Writes build a new state under a mutex. With persistence enabled, a bbolt
-transaction commits changes before the in-memory state becomes visible.
-Readers take snapshots and perform protocol work after releasing the mutex.
-Deletion and retention preserve remaining UIDs. One process owns a database;
-this is a test mail service, not a clustered mail server.
+- **Raw MIME is the source of truth.** Parsed headers, bodies and attachments
+  are derived from it for the HTTP API.
+- **Three identifiers, three purposes:** the HTTP `ID` (a UUID), the IMAP `UID`
+  (increasing per folder) and the `Message-ID` header (whatever the sender set).
+- **Accounts are fully separate.** A small manager holds the account list and
+  which SMTP recipient belongs to which account. Everything else is per account.
 
-A toxic combines a name, enabled state, exact conjunctive selector, type and
-attributes. Selecting matching toxics, applying probability and incrementing
-hit counts happens atomically under a short registry lock. Waiting and protocol
-responses happen after releasing that lock. A slow selected message therefore
-cannot block another test's independent connection through a shared lock.
+## Concurrency
 
-Isolation still requires good ownership: a test must select its own UUID or
-unique address. The service cannot distinguish two tests that deliberately use
-the same selector. No global failure mode is offered. A shared SMTP transaction
-or IMAP command is an indivisible protocol operation; avoid combining unrelated
-tests' messages in one command when testing delays/rejections.
+Writes happen under a mutex. With persistence on, the bbolt transaction commits
+before the change becomes visible. Reads take a snapshot and do protocol work
+after releasing the lock, so a slow IMAP client never blocks writers.
 
-IMAP toxics change a returned snapshot, never the persisted MIME. HTTP remains
-available for inspection and cleanup while a toxic is active. Searches exclude
-noncandidate messages before applying faults. SMTP pre-DATA faults only know
-envelope addresses; the API rejects selectors requiring unavailable headers. The
-first RCPT chooses the account, so sender checks are deferred until that point.
-A transaction cannot mix accounts, avoiding cross-account DATA failures.
+## Toxics and isolation
 
-WebSocket updates and webhooks are best-effort notifications. Slow WebSocket
-clients are disconnected when their bounded queue fills. Webhooks use a bounded
-queue, configurable timing and three attempts; they are not a durable event log.
-Polling the HTTP API remains the authoritative way to assert stored state.
+A toxic is chosen and counted atomically under a short lock. Its delay or error
+happens **after** the lock is released. A delayed message in one test therefore
+never holds up another test's connection.
 
-Relay and forwarding are opt-in outbound operations, separate from capture.
-Delivery failures can be logged or propagated as a temporary SMTP failure;
-when propagated, the captured message remains available to diagnose the failure.
-Retries can therefore create duplicates unless duplicate suppression is enabled.
+The sandbox can only isolate tests that use distinct selectors. Two tests
+matching the same address or header will affect each other. That's why there
+is no global failure mode, and why selectors must be specific.
 
-The API's common Mailpit contracts are reimplemented independently. There is no
-Mailpit runtime/source dependency. HTML compatibility uses MIT-licensed Can I
-Email data with heuristic feature detection and equal client/version weighting;
-its scores are advisory and are not a rendering-engine result or an assertion
-of exact Mailpit scoring equivalence.
+One SMTP transaction or IMAP command is indivisible. If it includes messages
+from two tests, a fault for one affects both.
+
+IMAP toxics change the response, never the stored message.
+
+## What it is not
+
+A single-process test double. There is no clustering. Webhooks and WebSocket
+events are best-effort, so poll the API when a test needs a definite answer.
+Relay and forwarding are separate from capture and must be turned on explicitly.
