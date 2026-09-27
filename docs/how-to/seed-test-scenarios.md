@@ -35,9 +35,9 @@ curl -fsS "${IMAP_FIXTURE_URL}/messages" \
   -d '{"folder":"Sent","from":"Clinic <clinic@example.test>","to":["alice@example.test"],"cc":["copy@example.test"],"subject":"Your appointment","message_id":"sent@example.test","flags":["\\Seen"],"body":"A synthetic appointment message."}'
 ```
 
-The fixture has the `\Seen` flag from creation. Changing flags later is
-unsupported. Nothing is delivered to the recipients. To represent an email
-captured by a separate SMTP service, seed its details and Message-ID explicitly.
+The fixture has the `\Seen` flag from creation. HTTP read updates and IMAP STORE
+can change it later. Fixtures do not deliver externally. App SMTP deliveries are
+already captured in the same Sent folder, so no synthetic copy is needed.
 
 ## Test deduplication across folders
 
@@ -67,19 +67,28 @@ shared by all clients, and concurrent tests can append additional messages.
 Use a separate Compose project and distinct host ports when a test needs a
 completely isolated mailbox.
 
-## Reset an isolated mailbox
-
-When no other test uses your instance, run this from its checkout with the
-same Compose project selected:
+## Import custom MIME
 
 ```sh
-docker compose restart imap-emulator
-docker compose up -d --wait --wait-timeout 60
+curl -fsS 'http://localhost:8026/api/v1/messages/raw?folder=INBOX' \
+  -H 'Content-Type: message/rfc822' --data-binary @fixture.eml
 ```
 
-All folders are now empty. Reconnect IMAP clients and let your importer process
-the new UIDVALIDITY before seeding the next scenario. There is no HTTP delete
-or reset endpoint, and IMAP deletion is unsupported. Restarting a shared
-instance also removes other tests' fixtures.
+This preserves raw MIME, including X-Test-ID headers used by
+[scoped toxics](toxics.md). JSON /api/v1/send can also construct multipart messages
+with base64 attachments. Fixture /messages remains convenient for historical mail.
+
+## Delete owned fixtures
+
+Find IDs using your unique Message-ID or address, then delete only those IDs:
+
+```sh
+curl -fsS -X DELETE http://localhost:8026/api/v1/messages \
+  -H 'Content-Type: application/json' -d '{"IDs":["YOUR-MESSAGE-UUID"]}'
+```
+
+Never send an empty ID array in shared tests: it means all mail. For a completely
+isolated in-memory instance, restarting also clears mail and regenerates
+UIDVALIDITY. Persistent storage survives restarts. Toxics always reset on restart.
 
 [Documentation index](../README.md)

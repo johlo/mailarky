@@ -1,80 +1,83 @@
-# HTTP fixture API reference
+# HTTP API reference
 
-Default base URL: `http://localhost:8026` on the host, or
-`http://imap-emulator:8026` on the Compose network. The API has no authentication
-and creates local test fixtures. It never sends mail to recipients.
+Default base URL `http://localhost:8026`. The complete machine-readable contract
+is [openapi.yaml](../../openapi.yaml). Authentication/TLS, webroot, CORS and host
+restrictions are optional; see [configuration](configuration.md).
 
-The [OpenAPI specification](../../openapi.yaml) is the machine-readable
-contract. Implementation: [control.go](../../control.go).
+## Endpoints
 
-## GET /healthz
+| Method / path | Purpose |
+| --- | --- |
+| GET /, /healthz, /livez, /readyz | Service metadata / health |
+| GET /api/v1/messages, /api/v1/search | Paginated messages, newest ingestion first |
+| PUT /api/v1/messages | Set Read for IDs or Search, or all if neither provided |
+| DELETE /api/v1/messages | Delete IDs; absent/empty IDs deletes all |
+| DELETE /api/v1/search | Delete a required nonempty query |
+| GET /api/v1/message/{id} | Detail, decoded Text/HTML; marks read |
+| GET /api/v1/message/{id}/headers | Header map of arrays |
+| GET /api/v1/message/{id}/raw | Original MIME bytes |
+| GET /api/v1/message/{id}/part/{part} | Decoded attachment/inline bytes |
+| GET /api/v1/message/{id}/part/{part}/thumb | PNG thumbnail, max 320px dimensions |
+| POST /api/v1/message/{id}/release | Deliver through configured relay to To recipients |
+| GET /api/v1/message/{id}/link-check | Validate links; optional follow=true |
+| GET /api/v1/message/{id}/html-check | HTML/CSS compatibility analysis |
+| GET /api/v1/message/{id}/sa-check | Configured SpamAssassin report |
+| POST /api/v1/send | Compose/capture JSON Text/HTML, headers, tags and base64 attachments |
+| POST /api/v1/messages/raw?folder=INBOX | Import MIME bytes |
+| POST /messages | Convenient historical plain-text fixture |
+| GET/PUT /api/v1/tags | List tags / replace tags for IDs |
+| PUT/DELETE /api/v1/tags/{tag} | Rename with Name / remove globally |
+| GET /api/v1/info, /api/v1/webui | Store/runtime metadata / headless capabilities |
+| GET /api/events | WebSocket new/update/delete notifications |
+| GET /metrics | Optional Prometheus metrics |
+| GET/POST /api/v1/folders | List folders / create with name |
+| GET/POST /api/v1/toxics | List / create scoped toxics |
+| GET/PUT/PATCH/DELETE /api/v1/toxics/{name} | Inspect / replace / enable-disable / delete |
+| GET/PUT /api/v1/chaos | Disabled metadata / explicit 400 rejection |
+| GET /view/{id}.html or .txt | Message body; HTML is sandboxed, no mail client UI |
 
-Returns HTTP 200 with the text body `ok` followed by a newline. It checks that
-the HTTP service can respond; it does not authenticate to IMAP or wait for an
-application sync.
+Message endpoints accept database UUIDs or `latest`. List responses use
+`messages`, `start`, `total`, `unread`, `messages_count`, `messages_unread`, `tags`.
+Individual message fields retain uppercase Mailpit-style casing, including ID,
+MessageID, From/To/Cc/Bcc/ReplyTo, Subject, Created, Size, Tags, Read, and Username.
+The additional Folder and UID fields identify the IMAP record. Detail adds Date,
+Text, HTML, Inline, Attachments, ReturnPath and ListUnsubscribe. Attachments expose
+PartID, FileName, ContentType, ContentID, Size and MD5/SHA1/SHA256 Checksums.
 
-## POST /messages
+## Search
 
-Appends a synthetic email to one folder. Send a JSON object with
-`Content-Type: application/json`. The decoder limits the request to 1 MiB and
-rejects unknown fields.
+Queries combine words/quoted phrases with AND; prefix a term with `!` or `-` to
+negate it. Supported filters: from, to, cc, bcc, reply-to, addressed, subject,
+message-id, tag, username, folder, body; is:read/unread/tagged; has:attachment/inline;
+larger/smaller (bytes, K/KB, M/MB); before/after (ISO or YYYY/MM/DD, optionally time).
+Date filters use ingestion time. `tz` chooses an IANA timezone (UTC default).
+`start` defaults to 0; `limit` defaults to 50, maximum 10000. Filters ignore case
+for text matching; malformed queries return 400. URL-encode query strings.
 
-| Field | JSON type | Requirement or default | Meaning |
-| --- | --- | --- | --- |
-| `folder` | string | Omitted or empty: `INBOX` | Exactly `INBOX`, `Sent`, or `Archive` |
-| `from` | string | Required | One parseable sender address, optionally with a display name |
-| `to` | array of strings | At least one recipient across `to`, `cc`, and `bcc` | To addresses |
-| `cc` | array of strings | Empty by default | Cc addresses |
-| `bcc` | array of strings | Empty by default | Bcc addresses, retained in the synthetic message |
-| `subject` | string | Empty by default | Single-line subject; non-ASCII text is MIME encoded |
-| `message_id` | string | Omitted or empty: generated UUID plus `@imap.example.test` | Message-ID header value; one surrounding angle-bracket pair is removed before storage formatting and response |
-| `date` | string or null | Omitted or null: current UTC time | RFC 3339 original message time, written to the Date header in UTC at second precision |
-| `internal_date` | string or null | Omitted or null: resolved `date` | RFC 3339 IMAP INTERNALDATE |
-| `body` | string | Empty by default | UTF-8 plain-text message body, retrievable through IMAP |
-| `flags` | array of strings | Empty by default | Flags assigned at creation, such as `"\\Seen"` in JSON |
+## Fixture body
 
-Each address entry is parsed individually. Addresses and subjects must not
-contain CR or LF. After normalization, Message-IDs must be nonempty and must
-not contain angle brackets, spaces, tabs, CR, or LF. The service does not
-require Message-IDs to be unique or validate that they contain `@`.
+`POST /messages` accepts at most 1 MiB JSON. Required: from and at least one
+recipient in to/cc/bcc arrays. Optional: folder (INBOX), subject, message_id
+(generated if absent), date (now), internal_date (date), body, flags. Header fields
+reject newlines. Addresses allow display names. Date values are RFC3339. Folder
+must exist. The 201 response contains folder and message_id. It preserves the
+original fixture contract; use raw import or send for custom headers/attachments.
 
-The generated message contains address headers, Subject, Message-ID, Date,
-MIME-Version, and `Content-Type: text/plain; charset=utf-8`. There are no HTTP
-fields for arbitrary headers, HTML alternatives, or attachments.
+## Sending and mutation
 
-### Successful response
+`POST /api/v1/send` accepts From {Name,Email}, To/Cc/ReplyTo arrays of that shape,
+Bcc strings, Subject, Text, HTML, Headers (string map), Tags and Attachments
+[{Filename,ContentType,ContentID,Content(base64)}]. At least one recipient is
+required. A successful response has ID and MessageID. Capture may optionally
+relay/forward if configured. It does not execute SMTP toxics; those act on SMTP.
 
-HTTP 201, `Content-Type: application/json`:
+Read mutation uses {IDs:[...],Read:true} or {Search:"...",Read:false}. Tags use
+{IDs:[...],Tags:[...]}; rename uses {Name:"..."}. Delete uses {IDs:[...]}. Never
+omit ownership IDs in shared concurrent tests. Global tag operations likewise
+require test-owned tag names.
 
-```json
-{"folder":"INBOX","message_id":"example@example.test"}
-```
-
-The returned ID omits angle brackets; the stored header includes them. The
-response does not contain the IMAP UID. The append has completed when 201 is
-returned, but a connected application may not have polled yet.
-
-Every successful POST creates a separate message. Reusing a Message-ID does
-not replace or merge a previous fixture. There are no HTTP endpoints to list,
-fetch, update, delete, or reset messages; use IMAP to inspect them.
-
-## Errors
-
-Errors use plain-text bodies ending in a newline.
-
-| HTTP status | Body | Condition |
-| --- | --- | --- |
-| 400 | `invalid message JSON` | Decode failure, such as malformed JSON, an unknown field, an invalid field type or date, or exceeding the request limit |
-| 400 | `folder must be INBOX, Sent or Archive` | Unsupported folder |
-| 400 | `invalid From address`, `invalid To address`, `invalid Cc address`, or `invalid Bcc address` | An address cannot be parsed or contains a newline |
-| 400 | `recipients are required and subject must be a single line` | No recipients, or a subject containing a newline |
-| 400 | `invalid message_id` | Message-ID fails validation after normalization |
-| 500 | `could not append message` | Mailbox append failed |
-
-Rejected fixtures are not appended. There is no authentication challenge or
-application-import status endpoint.
-
-See [seed test scenarios](../how-to/seed-test-scenarios.md) for requests you
-can adapt to tests.
-
-[Documentation index](../README.md)
+Most errors are plain text and use 400 for validation, 401 for authentication,
+404 for missing resources and 500 for storage failures. Send errors use JSON
+{Error:...}; external delivery failure returns 502 after capture. JSON decoding
+rejects unknown fields and trailing values. See [toxics](../how-to/toxics.md) for
+failure configuration and [compatibility](compatibility.md) for differences.

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"mime"
 	"net/http"
@@ -71,38 +70,9 @@ func (req *messageRequest) rawMessage() (string, time.Time, error) {
 }
 
 func controlHandler(b *mailboxBackend) http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("ok\n"))
-	})
-	mux.HandleFunc("POST /messages", func(w http.ResponseWriter, r *http.Request) {
-		var req messageRequest
-		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&req); err != nil {
-			http.Error(w, "invalid message JSON", http.StatusBadRequest)
-			return
-		}
-		if req.Folder == "" {
-			req.Folder = "INBOX"
-		}
-		box := b.user.boxes[req.Folder]
-		if box == nil {
-			http.Error(w, "folder must be INBOX, Sent or Archive", http.StatusBadRequest)
-			return
-		}
-		raw, date, err := req.rawMessage()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if err := box.CreateMessage(req.Flags, date, strings.NewReader(raw)); err != nil {
-			http.Error(w, "could not append message", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"folder": req.Folder, "message_id": req.MessageID})
-	})
-	return mux
+	a, err := newAPI(b)
+	if err != nil {
+		panic(err)
+	}
+	return a.handler()
 }

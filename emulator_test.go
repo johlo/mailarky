@@ -24,6 +24,7 @@ func testMailbox(t *testing.T) (*mailboxBackend, *client.Client, http.Handler) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { b.Close() })
 	cert, err := tls.LoadX509KeyPair("testdata/tls/server.crt", "testdata/tls/server.key")
 	if err != nil {
 		t.Fatal(err)

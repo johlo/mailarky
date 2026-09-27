@@ -1,56 +1,49 @@
-# IMAP emulator
+# SMTP / IMAP mail emulator
 
-A local TLS IMAP server for integration and end-to-end tests. Seed synthetic
-emails through an HTTP API, then fetch them with your application's normal
-IMAP client. Messages live in memory; no database or SMTP server is required.
-
-## Documentation
-
-Start with the [documentation index](docs/README.md), organized using
-[Diátaxis](https://diataxis.fr/):
-
-| Your goal | Read |
-| --- | --- |
-| Learn by running a complete example | [Your first test mailbox](docs/tutorials/first-mailbox.md) |
-| Connect an application | [Integrate with your application](docs/how-to/integrate-with-application.md) |
-| Create historical mail, sent mail, or duplicates | [Seed test scenarios](docs/how-to/seed-test-scenarios.md) |
-| Run locally or in CI | [Run and test the emulator](docs/how-to/run-and-test.md) |
-| Resolve a connection or fixture error | [Troubleshoot](docs/how-to/troubleshoot.md) |
-| Look up settings and behavior | [Configuration](docs/reference/configuration.md), [HTTP API](docs/reference/http-api.md), [IMAP behavior](docs/reference/imap-behavior.md) |
-| Understand the design | [How the emulator works](docs/explanation/design.md) |
-
-## Quick start
-
-Requires access to this repository, Git, Docker with Compose, and curl.
+An independent, headless test mail service. SMTP capture, TLS IMAP and the HTTP
+API share one mailbox. It reimplements Mailpit's headless feature set using Go
+protocol libraries, with message-scoped toxics for concurrent tests. There is no
+Mailpit dependency, browser mail client, or POP3 server.
 
 ```sh
 git clone https://github.com/johlo/imap-emulator.git
 cd imap-emulator
-docker compose up -d --build --wait --wait-timeout 60
-curl -fsS http://localhost:8026/healthz
+docker compose up -d --build --wait
+curl -fsS http://localhost:8026/api/v1/messages
 ```
 
-The health response is `ok`. Seed a message:
+| Interface | Default |
+| --- | --- |
+| SMTP capture | `localhost:1025`, no authentication |
+| IMAP | `localhost:1993`, implicit TLS |
+| HTTP API | `http://localhost:8026` |
+| IMAP account | `clinic@example.test` / `local-imap-only` |
+| Initial folders | `INBOX`, `Sent`, `Archive` |
 
-```sh
-curl -fsS http://localhost:8026/messages \
-  -H 'Content-Type: application/json' \
-  -d '{"from":"alice@example.test","to":["clinic@example.test"],"subject":"Hello"}'
-```
+Trust [the bundled test certificate](testdata/tls/server.crt) in IMAP clients.
+Compose publishes all three ports on loopback. SMTP deliveries appear in `Sent`;
+fixtures default to `INBOX`. Storage is in memory unless a database is configured.
+Outbound delivery is disabled unless relay/forwarding is explicitly configured.
 
-Connect over implicit TLS to `localhost:1993`, using `clinic@example.test` /
-`local-imap-only`. Trust [the bundled test certificate](testdata/tls/server.crt)
-in your client. The initial folders are `INBOX`, `Sent`, and `Archive`.
+The HTTP API supports inspection, raw MIME, attachments/thumbnails, search, read
+flags, tags, deletion, JSON sending, webhooks, WebSocket events, diagnostics,
+retention, persistence, authentication/TLS and metrics. Review the
+[compatibility and differences](docs/reference/compatibility.md) before replacing
+an existing Mailpit deployment.
 
-The server supports reading and appending mail. It does not receive SMTP or
-send external mail. Restarting clears all messages. Both published ports bind
-to loopback; the credentials and certificate are public test fixtures.
+[Documentation](docs/README.md) follows Diátaxis:
 
-Stop it with `docker compose down`. For different ports, see
-[run and test the emulator](docs/how-to/run-and-test.md#choose-host-ports).
+| Need | Guide |
+| --- | --- |
+| Learn the shared mailbox | [First mailbox tutorial](docs/tutorials/first-mailbox.md) |
+| Exercise failures in concurrent tests | [Use message-scoped toxics](docs/how-to/toxics.md) |
+| Configure an application | [Integration](docs/how-to/integrate-with-application.md) |
+| Seed historical or custom MIME mail | [Test scenarios](docs/how-to/seed-test-scenarios.md) |
+| Run locally, persist mail, or use CI | [Run and test](docs/how-to/run-and-test.md) |
+| Look up the contract | [HTTP API](docs/reference/http-api.md), [OpenAPI](openapi.yaml), [configuration](docs/reference/configuration.md), [IMAP](docs/reference/imap-behavior.md) |
+| Understand storage and isolation | [Design](docs/explanation/design.md) |
+| Diagnose a problem | [Troubleshooting](docs/how-to/troubleshoot.md) |
 
-## Development
-
-Install the Go version specified in [go.mod](go.mod), then run `make test` for
-race-checked tests and `go vet`. See the [development and CI guide](docs/how-to/run-and-test.md).
-The machine-readable HTTP contract is [openapi.yaml](openapi.yaml).
+Run `make test` for protocol/API tests with the Go race detector and `go vet`.
+The HTML compatibility checker uses [Can I Email](https://www.caniemail.com/)
+data under its [MIT license](data/LICENSE.caniemail).

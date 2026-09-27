@@ -1,101 +1,70 @@
-# Run and test the emulator
+# Run, persist and test
 
-Run the commands below from the emulator checkout unless stated otherwise.
-
-## Choose host ports
-
-Set these variables before running Compose:
+## Docker and host ports
 
 ```sh
-export IMAP_EMULATOR_PORT=11993
-export IMAP_EMULATOR_HTTP_PORT=18026
-docker compose up -d --build --wait --wait-timeout 60
-curl -fsS http://localhost:18026/healthz
+docker compose up -d --build --wait
+SMTP_EMULATOR_PORT=11025 IMAP_EMULATOR_PORT=11993 IMAP_EMULATOR_HTTP_PORT=18026   docker compose -p another-mailbox up -d --build --wait
 ```
 
-Host clients now use IMAP port 11993 and HTTP port 18026. Inside the container,
-the server still listens on 1993 and 8026. Keep the same environment when
-running subsequent Compose commands, and update your test client's URLs.
+Host port overrides do not change container listeners. Use the same project name
+and overrides when running subsequent Compose commands. `docker compose down`
+stops the default stack. In-memory messages and all toxics disappear on restart.
 
-For separate instances, also set distinct `COMPOSE_PROJECT_NAME` values and
-choose distinct host ports. See [configuration](../reference/configuration.md)
-for the distinction between Compose and process variables.
+## Local Go development
 
-## Run from Go source
+Install the Go version in `go.mod`, then run `make run`. It points IMAP TLS at
+the bundled fixture certificate. `make test` runs race-checked tests and vet.
+All protocol tests use ephemeral local ports and synthetic messages, including
+SMTP authentication/TLS, relay, persistence, diagnostics and concurrent toxics.
 
-Install the Go version in [go.mod](../../go.mod), then run:
+## Persist mail
 
-```sh
-make test
-make run
-```
-
-`make test` runs the Go tests with the race detector and runs `go vet`.
-`make run` loads the bundled certificate and starts the process in the
-foreground. Stop it with Ctrl+C. It uses ports 1993 and 8026 by default; to
-avoid another running instance:
-
-```sh
-IMAP_EMULATOR_PORT=11993 IMAP_EMULATOR_HTTP_PORT=18026 make run
-```
-
-Unlike Compose's published-port overrides, these values change the process's
-actual listener ports. Direct runs bind both listeners on all interfaces.
-
-## Use a custom certificate
-
-Provide a PEM certificate and matching PEM private key. The certificate must
-cover the hostname your client uses; configure the client to trust its issuer.
-For a direct run, set the paths explicitly:
-
-```sh
-IMAP_EMULATOR_CERT=/absolute/path/server.crt \
-IMAP_EMULATOR_KEY=/absolute/path/server.key \
-go run .
-```
-
-Use `go run .` for this command: `make run` explicitly selects the bundled
-fixture paths. For Docker, merge these mounts into the service configuration:
+Create a host directory writable by container UID 65532. Add a Compose override:
 
 ```yaml
 services:
   imap-emulator:
+    environment:
+      MP_DATABASE: /data/mail.db
+      MP_MAX_MESSAGES: "0"
     volumes:
-      - ./local-tls/server.crt:/certs/server.crt:ro
-      - ./local-tls/server.key:/certs/server.key:ro
+      - ./mail-data:/data
 ```
 
-The container runs as UID/GID `65532:65532`; both mounted files and their
-parent directories must be accessible to that user. Keep custom private keys
-out of Git. To regenerate the shared public test fixtures, use the
-[certificate maintenance instructions](../../testdata/tls/README.md) and
-update the certificate trusted by each consuming application.
+The database is bbolt, not a Mailpit SQLite file. Message MIME, flags, tags,
+folders, UIDs and UIDVALIDITY survive restart. Only one service process may own
+the file. Back up a stopped database or a consistent bbolt snapshot; copying an
+actively written file is not a supported backup procedure. Do not commit test
+mail or databases. Toxics and pending webhook notifications remain ephemeral.
 
-## Run in CI
+Use `MP_MAX_MESSAGES` (500 by default; 0 unlimited) and `MP_MAX_AGE=24h` for
+retention. Age is based on ingestion, not the original Date header. Retention
+applies to the entire mailbox; disable it for suites with shared concurrent mail.
 
-The repository's [workflow](../../.github/workflows/ci.yml) runs `make test`,
-builds and starts the container, waits for health, and seeds a message. To
-exercise your own application, use the same lifecycle:
+## CI
 
-```sh
-docker compose up -d --build --wait --wait-timeout 60
-```
-
-Then seed fixtures and run the application's integration tests. The
-[integration guide](integrate-with-application.md#drive-your-applications-import)
-describes what those tests should wait for and assert. A healthy fixture
-endpoint alone does not verify your client's authentication or TLS trust.
-
-Collect logs and stop the service in your CI runner's always-run cleanup step,
-including when a test fails:
+The workflow runs `make test`, builds/starts Docker, then runs
+`scripts/smoke.py` against SMTP, HTTP and verified TLS IMAP. Reproduce it with:
 
 ```sh
-docker compose logs
+make test
+docker compose up -d --build --wait
+python3 scripts/smoke.py
 docker compose down
 ```
 
-If CI checks out the emulator as a private submodule, initialize that submodule
-using credentials with access to it before building. The Docker image builds
-from source and needs no private container registry login.
+Inspect logs with `docker compose logs imap-emulator`. The image runs as UID/GID
+65532 and includes public TLS fixtures and the CA trust bundle for optional
+outbound HTTPS/SMTP. Health probes are `/healthz`, `/livez`, and `/readyz`.
 
-[Documentation index](../README.md)
+## Sendmail-compatible submission
+
+```sh
+./imap-emulator sendmail -S localhost:1025 -t < fixture.eml
+./imap-emulator sendmail -S localhost:1025 -f sender@example.test recipient@example.test < fixture.eml
+```
+
+`-t` extracts To/Cc/Bcc recipients; the Bcc header is removed for delivery.
+`-i`/`-oi` are accepted. This client mode targets an unauthenticated test SMTP
+listener. `MP_SENDMAIL_SMTP_ADDR` sets its default address.

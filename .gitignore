@@ -1,3 +1,5 @@
 /imap-emulator
 /coverage.out
 .DS_Store
+/mail-data/
+/*.db
