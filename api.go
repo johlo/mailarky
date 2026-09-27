@@ -17,8 +17,17 @@ import (
 )
 
 type httpAPI struct {
-	store          *mailboxBackend
-	auth, sendAuth credentials
+	store           *mailboxBackend
+	auth, sendAuth  credentials
+	manager         *mailboxManager
+	webrootOverride *string
+}
+
+func (a *httpAPI) webroot() string {
+	if a.webrootOverride != nil {
+		return *a.webrootOverride
+	}
+	return a.store.config.Webroot
 }
 
 func newAPI(store *mailboxBackend) (*httpAPI, error) {
@@ -53,6 +62,12 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, size int64, value any) e
 
 func (a *httpAPI) handler() http.Handler {
 	mux := http.NewServeMux()
+	if a.manager != nil {
+		mux.HandleFunc("GET /api/v1/mailboxes", a.listMailboxes)
+		mux.HandleFunc("POST /api/v1/mailboxes", a.createMailbox)
+		mux.HandleFunc("GET /api/v1/mailboxes/{mailbox}", a.getMailbox)
+		mux.HandleFunc("DELETE /api/v1/mailboxes/{mailbox}", a.deleteMailbox)
+	}
 	for _, path := range []string{"/healthz", "/livez", "/readyz"} {
 		mux.HandleFunc("GET "+path, func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok\n")) })
 	}
@@ -102,11 +117,22 @@ func (a *httpAPI) handler() http.Handler {
 		jsonResponse(w, 200, map[string]any{"service": "mail-emulator", "protocols": []string{"smtp", "imap", "http"}, "api": "/api/v1/messages"})
 	})
 	var handler http.Handler = mux
-	root := strings.Trim(a.store.config.Webroot, "/")
+	root := strings.Trim(a.webroot(), "/")
 	if root != "" {
 		handler = http.StripPrefix("/"+root, mux)
 	}
-	return a.middleware(handler)
+	handler = a.middleware(handler)
+	if a.manager != nil {
+		outer := http.NewServeMux()
+		prefix := ""
+		if root != "" {
+			prefix = "/" + root
+		}
+		outer.HandleFunc(prefix+"/mailboxes/{mailbox}/", a.scopedMailbox)
+		outer.Handle("/", handler)
+		return outer
+	}
+	return handler
 }
 
 func (a *httpAPI) middleware(next http.Handler) http.Handler {
@@ -145,7 +171,7 @@ func (a *httpAPI) middleware(next http.Handler) http.Handler {
 			w.WriteHeader(204)
 			return
 		}
-		path := strings.TrimPrefix(r.URL.Path, "/"+strings.Trim(c.Webroot, "/"))
+		path := strings.TrimPrefix(r.URL.Path, "/"+strings.Trim(a.webroot(), "/"))
 		if !strings.HasPrefix(path, "/") {
 			path = "/" + path
 		}

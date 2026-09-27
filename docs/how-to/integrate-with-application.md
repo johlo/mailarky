@@ -20,7 +20,8 @@ intentional differences. No browser UI is served.
 
 Pin the repository as a submodule or pin a built image. For isolated CI stacks,
 publish distinct host ports while keeping container ports fixed. For concurrent
-tests in one stack, use unique addresses or `X-Test-ID` and
+tests in one stack, provision [separate accounts](separate-mailboxes.md) or use
+unique addresses / `X-Test-ID` within the default account and
 [message-scoped toxics](toxics.md); set `MP_MAX_MESSAGES=0` to prevent global
 retention from evicting another test's messages. Delete only owned IDs afterward.
 

@@ -1,12 +1,12 @@
 # IMAP behavior
 
 The transport is IMAP4rev1 over implicit TLS (minimum TLS 1.2), using go-imap's
-protocol implementation and this project's shared store. There is one configurable
-account, with `INBOX`, `Sent` and `Archive` initially present and subscribed.
+protocol implementation and this project's shared store. There is a configurable
+default account and API-provisioned independent accounts, each with `INBOX`, `Sent` and `Archive` initially present and subscribed. A different configured SMTP folder is also created at startup.
 
 | Operation | Behavior |
 | --- | --- |
-| LOGIN | Configured account; wrong credentials rejected |
+| LOGIN | Selects account by its unique username/password; wrong credentials rejected |
 | LIST/LSUB, SELECT/EXAMINE, STATUS | Inspect shared folders and message counts |
 | SEARCH / UID SEARCH | Header/body/date/flag criteria from the IMAP protocol library |
 | FETCH / UID FETCH | Metadata, raw bodies and MIME sections, with scoped toxics |

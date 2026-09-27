@@ -62,8 +62,8 @@ using that value. Include the unique identifier in all copies belonging to a
 single deduplication test. Seed fixtures before triggering the application's
 sync, and use bounded polling to wait for results.
 
-Avoid asserting global mailbox counts in parallel tests. There is one account
-shared by all clients, and concurrent tests can append additional messages.
+Avoid asserting global mailbox counts in parallel tests. Concurrent tests in the default account can append additional messages.
+[Provision an account per test](separate-mailboxes.md) for independent state.
 Use a separate Compose project and distinct host ports when a test needs a
 completely isolated mailbox.
 

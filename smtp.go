@@ -60,6 +60,7 @@ func (users credentials) valid(username, password string) bool {
 
 type smtpBackend struct {
 	store   *mailboxBackend
+	manager *mailboxManager
 	users   credentials
 	deliver func(context.Context, *storedMessage) error
 }
@@ -70,12 +71,19 @@ type smtpSession struct {
 	recipients    []string
 	username      string
 	authenticated bool
+	selected      *mailboxBackend
 }
 
 func (b *smtpBackend) NewSession(c *smtp.Conn) (smtp.Session, error) {
 	return &smtpSession{backend: b, conn: c}, nil
 }
-func (s *smtpSession) Reset()        { s.from = ""; s.recipients = nil }
+func (s *smtpSession) Reset() { s.from = ""; s.recipients = nil; s.selected = nil }
+func (s *smtpSession) store() *mailboxBackend {
+	if s.selected != nil {
+		return s.selected
+	}
+	return s.backend.store
+}
 func (s *smtpSession) Logout() error { return nil }
 func (s *smtpSession) AuthMechanisms() []string {
 	if len(s.backend.users) > 0 || s.backend.store.config.SMTPAcceptAny {
@@ -145,7 +153,7 @@ func validEnvelope(address string, empty bool) bool {
 }
 
 func (s *smtpSession) fault(stage string, raw []byte) error {
-	b := s.backend.store
+	b := s.store()
 	m := &storedMessage{EnvelopeFrom: s.from, EnvelopeTo: s.recipients, Folder: b.config.SMTPFolder, Headers: map[string][]string{}}
 	if len(raw) > 0 {
 		detail, headers, err := parseMessage(raw, time.Now(), s.from, s.recipients)
@@ -183,11 +191,32 @@ func (s *smtpSession) Mail(from string, _ *smtp.MailOptions) error {
 	}
 	s.Reset()
 	s.from = from
+	// Recipient routing cannot select an account until RCPT TO. Defer sender
+	// toxics until then so the default account cannot affect another account.
+	if s.backend.manager != nil {
+		return nil
+	}
 	return s.fault("sender", nil)
 }
 func (s *smtpSession) Rcpt(to string, _ *smtp.RcptOptions) error {
 	if !validEnvelope(to, false) {
 		return &smtp.SMTPError{Code: 501, Message: "Invalid envelope recipient"}
+	}
+	if h := s.backend.manager; h != nil {
+		target := h.route(to)
+		if target == nil {
+			return &smtp.SMTPError{Code: 550, Message: "Mailbox is unavailable"}
+		}
+		if s.selected != nil && s.selected != target {
+			return &smtp.SMTPError{Code: 553, Message: "Use separate SMTP transactions for different mailboxes"}
+		}
+		if s.selected == nil {
+			s.selected = target
+			if err := s.fault("sender", nil); err != nil {
+				s.selected = nil
+				return err
+			}
+		}
 	}
 	s.recipients = append(s.recipients, to)
 	if err := s.fault("recipient", nil); err != nil {
@@ -197,7 +226,7 @@ func (s *smtpSession) Rcpt(to string, _ *smtp.RcptOptions) error {
 	return nil
 }
 func (s *smtpSession) Data(reader io.Reader) error {
-	b := s.backend.store
+	b := s.store()
 	raw, err := io.ReadAll(io.LimitReader(reader, b.config.MaxSize+1))
 	if err != nil {
 		return err
@@ -214,8 +243,12 @@ func (s *smtpSession) Data(reader io.Reader) error {
 		b.rejected.Add(1)
 		return &smtp.SMTPError{Code: 554, Message: "Message could not be stored"}
 	}
-	if s.backend.deliver != nil {
-		if err := s.backend.deliver(context.Background(), m); err != nil {
+	deliver := s.backend.deliver
+	if s.backend.manager != nil {
+		deliver = b.deliver
+	}
+	if deliver != nil {
+		if err := deliver(context.Background(), m); err != nil {
 			return &smtp.SMTPError{Code: 451, Message: "Configured delivery failed"}
 		}
 	}
@@ -224,12 +257,16 @@ func (s *smtpSession) Data(reader io.Reader) error {
 	return nil
 }
 
-func newSMTPServer(b *mailboxBackend, deliver func(context.Context, *storedMessage) error) (*smtp.Server, error) {
+func newSMTPServer(b *mailboxBackend, deliver func(context.Context, *storedMessage) error, managers ...*mailboxManager) (*smtp.Server, error) {
 	users, err := readCredentials(b.config.SMTPAuthFile, b.config.SMTPAuth)
 	if err != nil {
 		return nil, err
 	}
-	srv := smtp.NewServer(&smtpBackend{store: b, users: users, deliver: deliver})
+	back := &smtpBackend{store: b, users: users, deliver: deliver}
+	if len(managers) > 0 {
+		back.manager = managers[0]
+	}
+	srv := smtp.NewServer(back)
 	srv.Addr = b.config.SMTPAddress
 	srv.Domain = "mail-emulator.test"
 	srv.MaxMessageBytes = b.config.MaxSize

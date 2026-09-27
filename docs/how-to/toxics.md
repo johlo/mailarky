@@ -1,6 +1,8 @@
 # Use message-scoped toxics in concurrent tests
 
-Give each test a unique token, preferably a UUID, and include it in an
+For complete state isolation, [create a separate mailbox per test](separate-mailboxes.md)
+and prefix toxic paths with its returned api_base. Toxic names and hit counts
+belong to that account. Within an account, give each test a unique token, preferably a UUID, and include it in an
 `X-Test-ID` header or Message-ID. A unique envelope recipient is useful when the
 application cannot add headers. Scope both message assertions and cleanup to
 that token. Never clear the whole mailbox or delete other tests' toxics.
@@ -54,8 +56,10 @@ rejects that transaction for all its recipients.
 | `imap_hide` | none | Omits matching records from SEARCH/FETCH responses |
 | `imap_replace_header` | `header`, `value` | Changes the header in returned IMAP content; empty value removes it |
 
-SMTP stages are `sender` (MAIL FROM), `recipient` (RCPT TO), and `data`
-(default). Before DATA the server has no headers or Message-ID: `sender`
+SMTP stages are `sender` (envelope sender check), `recipient` (RCPT TO), and `data`
+(default). Recipient routing chooses an account at the first RCPT TO; sender
+toxics run then, before recipient toxics, so default-account faults cannot affect
+another account. Before DATA the server has no headers or Message-ID: `sender`
 requires only `from`, and `recipient` accepts only envelope `from`/`to`.
 The API rejects impossible early-stage header selectors. Connection/authentication
 failures are intentionally excluded because no individual message exists yet.

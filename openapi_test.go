@@ -22,6 +22,17 @@ func TestOpenAPITracksRegisteredHTTPRoutes(t *testing.T) {
 	for _, path := range []string{"/healthz", "/livez", "/readyz"} {
 		registered["get "+path] = true
 	}
+	// Scoped handlers expose the same API, excluding account administration.
+	scoped := map[string]bool{}
+	for key := range registered {
+		method, path, _ := strings.Cut(key, " ")
+		if !strings.HasPrefix(path, "/api/v1/mailboxes") {
+			scoped[method+" /mailboxes/{mailbox}"+path] = true
+		}
+	}
+	for key := range scoped {
+		registered[key] = true
+	}
 	var spec struct {
 		Paths map[string]map[string]any `yaml:"paths"`
 	}

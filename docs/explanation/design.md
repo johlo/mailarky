@@ -1,6 +1,8 @@
 # Shared storage and test isolation
 
-SMTP, IMAP and HTTP are interfaces to one store. SMTP DATA parses the MIME,
+Each account has a store shared by SMTP, IMAP and HTTP. A manager owns only the
+account catalog and exact SMTP recipient bindings. Each account has independent
+folders, credentials, persistence, retention, notifications and toxics. SMTP DATA parses the MIME,
 checks matching toxics and commits a message to the configured folder. HTTP
 fixtures, raw imports, JSON sending and IMAP APPEND use the same append path.
 HTTP and IMAP therefore observe one identity, one raw message and one flag/tag
@@ -33,7 +35,9 @@ tests' messages in one command when testing delays/rejections.
 IMAP toxics change a returned snapshot, never the persisted MIME. HTTP remains
 available for inspection and cleanup while a toxic is active. Searches exclude
 noncandidate messages before applying faults. SMTP pre-DATA faults only know
-envelope addresses; the API rejects selectors requiring unavailable headers.
+envelope addresses; the API rejects selectors requiring unavailable headers. The
+first RCPT chooses the account, so sender checks are deferred until that point.
+A transaction cannot mix accounts, avoiding cross-account DATA failures.
 
 WebSocket updates and webhooks are best-effort notifications. Slow WebSocket
 clients are disconnected when their bounded queue fills. Webhooks use a bounded

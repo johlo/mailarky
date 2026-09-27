@@ -22,21 +22,23 @@ func run(ctx context.Context, c configuration) error {
 	if err != nil {
 		return err
 	}
-	b, err := openMailbox(c)
+	manager, err := openMailboxManager(ctx, c)
 	if err != nil {
 		return err
 	}
-	defer b.Close()
+	defer manager.Close()
+	b := manager.lookup("default").store
 	api, err := newAPI(b)
 	if err != nil {
 		return err
 	}
-	smtpServer, err := newSMTPServer(b, b.deliver)
+	api.manager = manager
+	smtpServer, err := newSMTPServer(b, b.deliver, manager)
 	if err != nil {
 		return err
 	}
 	defer smtpServer.Close()
-	imapServer := server.New(b)
+	imapServer := server.New(manager)
 	imapServer.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
 	defer imapServer.Close()
 	imapListener, err := tls.Listen("tcp", c.IMAPAddress, imapServer.TLSConfig)
@@ -59,8 +61,6 @@ func run(ctx context.Context, c configuration) error {
 	defer httpListener.Close()
 	httpServer := &http.Server{Handler: api.handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 64 << 10}
 	defer httpServer.Close()
-	stopWorkers := b.startWorkers(ctx)
-	defer stopWorkers()
 	errs := make(chan error, 3)
 	go func() { errs <- imapServer.Serve(imapListener) }()
 	go func() { errs <- smtpServer.Serve(smtpListener) }()

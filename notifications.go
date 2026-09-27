@@ -106,6 +106,7 @@ func (b *mailboxBackend) startWorkers(ctx context.Context) func() {
 							break
 						}
 						req.Header.Set("Content-Type", "application/json")
+						req.Header.Set("Mail-Emulator-Mailbox", b.config.MailboxID)
 						if b.config.Label != "" {
 							req.Header.Set("Mailpit-Label", b.config.Label)
 						}
@@ -167,11 +168,11 @@ func (a *httpAPI) info(w http.ResponseWriter, r *http.Request) {
 		database = a.store.config.Database
 		a.store.db.View(func(tx *bolt.Tx) error { size = tx.Size(); return nil })
 	}
-	jsonResponse(w, 200, map[string]any{"Version": "mail-emulator/2", "LatestVersion": "", "Database": database, "DatabaseSize": size, "Messages": len(list), "Unread": unread, "Tags": tags, "RuntimeStats": map[string]any{"Memory": mem.Alloc, "SMTPAccepted": a.store.accepted.Load(), "SMTPAcceptedSize": a.store.acceptedSize.Load(), "SMTPRejected": a.store.rejected.Load(), "SMTPIgnored": a.store.ignored.Load(), "MessagesDeleted": a.store.deleted.Load(), "Uptime": int64(time.Since(a.store.started).Seconds())}})
+	jsonResponse(w, 200, map[string]any{"MailboxID": a.store.config.MailboxID, "Version": "mail-emulator/2", "LatestVersion": "", "Database": database, "DatabaseSize": size, "Messages": len(list), "Unread": unread, "Tags": tags, "RuntimeStats": map[string]any{"Memory": mem.Alloc, "SMTPAccepted": a.store.accepted.Load(), "SMTPAcceptedSize": a.store.acceptedSize.Load(), "SMTPRejected": a.store.rejected.Load(), "SMTPIgnored": a.store.ignored.Load(), "MessagesDeleted": a.store.deleted.Load(), "Uptime": int64(time.Since(a.store.started).Seconds())}})
 }
 func (a *httpAPI) capabilities(w http.ResponseWriter, r *http.Request) {
 	c := a.store.config
-	jsonResponse(w, 200, map[string]any{"Label": c.Label, "ChaosEnabled": false, "MessageScopedToxics": true, "WebUI": false, "DuplicatesIgnored": c.IgnoreDuplicates, "SpamAssassin": c.SpamAssassin != "", "MessageRelay": map[string]any{"Enabled": c.Relay.Host != "", "SMTPServer": c.Relay.Host, "AllowedRecipients": c.Relay.AllowedRecipients, "BlockedRecipients": c.Relay.BlockedRecipients, "PreserveMessageIDs": c.Relay.PreserveMessageIDs, "ReturnPath": c.Relay.ReturnPath, "OverrideFrom": c.Relay.OverrideFrom}})
+	jsonResponse(w, 200, map[string]any{"Label": c.Label, "ChaosEnabled": false, "MessageScopedToxics": true, "MailboxManagement": a.manager != nil, "WebUI": false, "DuplicatesIgnored": c.IgnoreDuplicates, "SpamAssassin": c.SpamAssassin != "", "MessageRelay": map[string]any{"Enabled": c.Relay.Host != "", "SMTPServer": c.Relay.Host, "AllowedRecipients": c.Relay.AllowedRecipients, "BlockedRecipients": c.Relay.BlockedRecipients, "PreserveMessageIDs": c.Relay.PreserveMessageIDs, "ReturnPath": c.Relay.ReturnPath, "OverrideFrom": c.Relay.OverrideFrom}})
 }
 func (a *httpAPI) metrics(w http.ResponseWriter, r *http.Request) {
 	if !a.store.config.EnableMetrics {

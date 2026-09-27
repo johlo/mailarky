@@ -18,6 +18,7 @@ import (
 const maxMessageBytes = 50 << 20
 
 type configuration struct {
+	MailboxID             string        `yaml:"-"`
 	SMTPAddress           string        `yaml:"smtp"`
 	IMAPAddress           string        `yaml:"imap"`
 	HTTPAddress           string        `yaml:"http"`
@@ -79,7 +80,7 @@ type tagFilter struct {
 }
 
 func defaultConfig() configuration {
-	return configuration{SMTPAddress: ":1025", IMAPAddress: ":1993", HTTPAddress: ":8026", Cert: "/certs/server.crt", Key: "/certs/server.key", Username: mailboxUsername, Password: mailboxPassword, SMTPFolder: "Sent", MaxMessages: 500, MaxSize: maxMessageBytes, WebhookLimit: time.Second}
+	return configuration{MailboxID: "default", SMTPAddress: ":1025", IMAPAddress: ":1993", HTTPAddress: ":8026", Cert: "/certs/server.crt", Key: "/certs/server.key", Username: mailboxUsername, Password: mailboxPassword, SMTPFolder: "Sent", MaxMessages: 500, MaxSize: maxMessageBytes, WebhookLimit: time.Second}
 }
 
 func loadConfig(args []string) (configuration, error) {

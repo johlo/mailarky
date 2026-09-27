@@ -3,3 +3,4 @@
 .DS_Store
 /mail-data/
 /*.db
+/*.db.mailboxes/

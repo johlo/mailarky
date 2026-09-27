@@ -17,6 +17,7 @@ imap_port = int(os.environ.get('IMAP_EMULATOR_PORT', '1993'))
 token = str(uuid.uuid4())
 name = 'smoke-' + token
 ids = []
+accounts = []
 
 def call(path, method='GET', data=None):
     payload = None if data is None else json.dumps(data).encode()
@@ -26,10 +27,10 @@ def call(path, method='GET', data=None):
         body = response.read()
         return json.loads(body) if response.headers.get_content_type() == 'application/json' else body
 
-def send(identifier):
+def send(identifier, recipient=None):
     mail = EmailMessage()
     mail['From'] = 'smoke@example.test'
-    mail['To'] = token + '@example.test'
+    mail['To'] = recipient or token + '@example.test'
     mail['Message-ID'] = '<' + identifier + '@example.test>'
     mail['Subject'] = token
     mail.set_content('Container SMTP/HTTP/IMAP round trip')
@@ -60,8 +61,34 @@ try:
         status, body = imap.uid('fetch', found[0], '(BODY.PEEK[])')
         assert status == 'OK' and body[0][1] == raw, body
     assert call('/api/v1/toxics/' + name)['hits'] == 1
-    print('SMTP, HTTP, verified TLS IMAP and scoped rejection passed')
+    # Account scopes permit identical message IDs and toxic names safely.
+    for _ in range(2):
+        accounts.append(call('/api/v1/mailboxes', 'POST', {}))
+    first, second = accounts
+    identifier = 'account-' + token
+    call(first['api_base'] + '/api/v1/toxics', 'POST', {
+        'name': name, 'type': 'smtp_reject',
+        'selector': {'message_id': identifier + '@example.test'}, 'attributes': {'code': 451},
+    })
+    try:
+        send(identifier, first['recipients'][0])
+        raise AssertionError('Account-scoped rejection did not fire')
+    except smtplib.SMTPDataError as error:
+        assert error.smtp_code == 451, error
+    send(identifier, second['recipients'][0])
+    assert call(first['api_base'] + '/api/v1/messages')['total'] == 0
+    isolated = call(second['api_base'] + '/api/v1/messages')['messages']
+    assert len(isolated) == 1 and isolated[0]['MailboxID'] == second['id'], isolated
+    assert len(call('/api/v1/search?query=' + urllib.parse.quote('subject:' + token))['messages']) == 1
+    with imaplib.IMAP4_SSL('localhost', imap_port, ssl_context=context, timeout=10) as imap:
+        imap.login(second['username'], second['password'])
+        imap.select('Sent', readonly=True)
+        status, found = imap.uid('search', None, 'HEADER', 'Message-ID', identifier + '@example.test')
+        assert status == 'OK' and len(found[0].split()) == 1, found
+    print('SMTP, HTTP, verified TLS IMAP, scoped toxics and separate accounts passed')
 finally:
+    for account in accounts:
+        call('/api/v1/mailboxes/' + account['id'], 'DELETE')
     call('/api/v1/toxics/' + name, 'DELETE')
     if ids:
         call('/api/v1/messages', 'DELETE', {'IDs': ids})

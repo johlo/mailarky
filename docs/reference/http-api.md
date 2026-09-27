@@ -4,6 +4,12 @@ Default base URL `http://localhost:8026`. The complete machine-readable contract
 is [openapi.yaml](../../openapi.yaml). Authentication/TLS, webroot, CORS and host
 restrictions are optional; see [configuration](configuration.md).
 
+Create/list accounts at `POST/GET /api/v1/mailboxes`; inspect/delete at
+`GET/DELETE /api/v1/mailboxes/{id}`. Creation returns credentials once and an
+`api_base` such as `/mailboxes/{id}`. Prefix any data/toxic endpoint below with
+that base to operate on the account. Root paths address default only. See
+[separate mailboxes](../how-to/separate-mailboxes.md) for the lifecycle contract.
+
 ## Endpoints
 
 | Method / path | Purpose |
@@ -40,7 +46,7 @@ Message endpoints accept database UUIDs or `latest`. List responses use
 `messages`, `start`, `total`, `unread`, `messages_count`, `messages_unread`, `tags`.
 Individual message fields retain uppercase Mailpit-style casing, including ID,
 MessageID, From/To/Cc/Bcc/ReplyTo, Subject, Created, Size, Tags, Read, and Username.
-The additional Folder and UID fields identify the IMAP record. Detail adds Date,
+The additional MailboxID, Folder and UID fields identify the IMAP record. Detail adds Date,
 Text, HTML, Inline, Attachments, ReturnPath and ListUnsubscribe. Attachments expose
 PartID, FileName, ContentType, ContentID, Size and MD5/SHA1/SHA256 Checksums.
 

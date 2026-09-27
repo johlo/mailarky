@@ -1,8 +1,9 @@
 # SMTP / IMAP mail emulator
 
 An independent, headless test mail service. SMTP capture, TLS IMAP and the HTTP
-API share one mailbox. It reimplements Mailpit's headless feature set using Go
-protocol libraries, with message-scoped toxics for concurrent tests. There is no
+API share each account's mailbox. Create independent accounts through the API.
+It reimplements Mailpit's headless feature set using Go protocol libraries,
+with message-scoped toxics for concurrent tests. There is no
 Mailpit dependency, browser mail client, or POP3 server.
 
 ```sh
@@ -36,6 +37,7 @@ an existing Mailpit deployment.
 | Need | Guide |
 | --- | --- |
 | Learn the shared mailbox | [First mailbox tutorial](docs/tutorials/first-mailbox.md) |
+| Create a mailbox per test | [Separate mailboxes](docs/how-to/separate-mailboxes.md) |
 | Exercise failures in concurrent tests | [Use message-scoped toxics](docs/how-to/toxics.md) |
 | Configure an application | [Integration](docs/how-to/integrate-with-application.md) |
 | Seed historical or custom MIME mail | [Test scenarios](docs/how-to/seed-test-scenarios.md) |

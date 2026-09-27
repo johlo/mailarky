@@ -65,6 +65,9 @@ func newMailboxBackend() (*mailboxBackend, error) {
 }
 
 func openMailbox(c configuration) (*mailboxBackend, error) {
+	if !validFolder(c.SMTPFolder) {
+		return nil, errors.New("invalid SMTP folder name")
+	}
 	b := &mailboxBackend{config: c, state: storeState{Folders: map[string]folderState{}, Messages: map[string]*storedMessage{}}, done: make(chan struct{}), subscribers: map[chan notification]struct{}{}, started: time.Now()}
 	b.user = &mailboxUser{store: b, boxes: map[string]*mailbox{}}
 	b.toxics = newToxicRegistry()
@@ -109,6 +112,9 @@ func openMailbox(c configuration) (*mailboxBackend, error) {
 					return err
 				}
 				m.Detail, m.Headers = d, h
+				if m.MailboxID == "" {
+					m.MailboxID = c.MailboxID
+				}
 				b.state.Messages[m.ID] = &m
 				return nil
 			})
@@ -118,7 +124,7 @@ func openMailbox(c configuration) (*mailboxBackend, error) {
 			return nil, err
 		}
 	}
-	for _, name := range []string{"INBOX", "Sent", "Archive"} {
+	for _, name := range []string{"INBOX", "Sent", "Archive", c.SMTPFolder} {
 		if _, ok := b.state.Folders[name]; !ok {
 			b.state.Folders[name] = folderState{Name: name, NextUID: 1, Subscribed: true, Validity: newValidity()}
 		}
@@ -131,6 +137,13 @@ func openMailbox(c configuration) (*mailboxBackend, error) {
 			b.db.Close()
 		}
 		return nil, fmt.Errorf("unknown SMTP folder %q", c.SMTPFolder)
+	}
+	// Persist folder identity even when the mailbox is still empty.
+	if b.db != nil {
+		if err := b.mutate(func(*storeState) error { return nil }); err != nil {
+			b.db.Close()
+			return nil, err
+		}
 	}
 	return b, nil
 }
@@ -288,7 +301,7 @@ func (b *mailboxBackend) append(raw []byte, options appendOptions) (*storedMessa
 	if err != nil {
 		return nil, err
 	}
-	m := &storedMessage{ID: uuid.NewString(), Folder: options.Folder, Created: now, InternalDate: options.Date, Raw: append([]byte(nil), raw...), Flags: append([]string{}, options.Flags...), Tags: append([]string{}, options.Tags...), EnvelopeFrom: options.From, EnvelopeTo: append([]string{}, options.To...), Username: options.Username, Detail: d, Headers: h}
+	m := &storedMessage{MailboxID: b.config.MailboxID, ID: uuid.NewString(), Folder: options.Folder, Created: now, InternalDate: options.Date, Raw: append([]byte(nil), raw...), Flags: append([]string{}, options.Flags...), Tags: append([]string{}, options.Tags...), EnvelopeFrom: options.From, EnvelopeTo: append([]string{}, options.To...), Username: options.Username, Detail: d, Headers: h}
 	if err := b.applyTags(m); err != nil {
 		return nil, err
 	}

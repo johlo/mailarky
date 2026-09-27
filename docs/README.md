@@ -11,6 +11,7 @@ through HTTP, and read the same message with IMAP.
 ## How-to guides
 
 - [Connect your application](how-to/integrate-with-application.md)
+- [Give each test a separate mailbox](how-to/separate-mailboxes.md)
 - [Create isolated failures with toxics](how-to/toxics.md)
 - [Seed test scenarios](how-to/seed-test-scenarios.md)
 - [Run locally, persist mail and test in CI](how-to/run-and-test.md)

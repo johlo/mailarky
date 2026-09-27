@@ -9,7 +9,8 @@ configuration contract; the MP-prefixed environment variables ease migration.
 
 SMTP `:1025`, TLS IMAP `:1993`, HTTP `:8026`. All process listeners bind to all
 interfaces; Compose publishes them only on loopback. IMAP account:
-`clinic@example.test` / `local-imap-only`. Initial folders: INBOX, Sent, Archive;
+`clinic@example.test` / `local-imap-only`. Initial folders: INBOX, Sent, Archive
+and the configured SMTP folder if different;
 SMTP captures in Sent. Auth is disabled on SMTP/HTTP. Outbound delivery is disabled.
 Message storage is in memory; retain at most 500 messages, no age limit, 50 MiB
 maximum raw message size. Webhook minimum interval is 1 second.
@@ -103,8 +104,9 @@ credentials or no AUTH; otherwise configured SMTP credentials are required.
 
 HTTP uses Basic auth when configured. Send credentials override general HTTP
 auth for `/api/v1/send`; send-api-auth-accept-any accepts any supplied Basic
-credentials. Health probes bypass auth. These settings do not provide multiple
-isolated mailboxes; all users inspect the same test store.
+credentials. Health probes bypass auth. Create independent mailbox accounts through `/api/v1/mailboxes`. Their IMAP
+credentials are separate from server-wide SMTP and HTTP authentication; scoped
+HTTP access still uses the configured service credentials.
 
 ## Relay and forwarding
 
@@ -163,3 +165,11 @@ apply to the bounded in-memory webhook worker, with three attempts per message.
 `allowed_hosts` accepts comma-separated hostnames. Prometheus metrics are exposed
 at /metrics only when enabled. The Docker health probe assumes the default
 HTTP path/port; override it when changing webroot or enabling HTTPS.
+
+## Provisioned accounts
+
+The default account remains configurable above. Runtime accounts are created via
+`POST /api/v1/mailboxes` and inherit listener, auth, retention and outbound delivery
+settings. Each has a separate store, folders, UID space, toxic registry and queues.
+Persistent account metadata lives in MP_DATABASE; data files live in the sibling
+`MP_DATABASE.mailboxes/` directory. See [separate mailboxes](../how-to/separate-mailboxes.md).

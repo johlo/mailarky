@@ -25,6 +25,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/emersion/go-imap"
+	"github.com/emersion/go-imap/backend"
 	"github.com/emersion/go-imap/client"
 	"github.com/emersion/go-imap/server"
 )
@@ -38,9 +39,9 @@ func testStore(t *testing.T, c configuration) *mailboxBackend {
 	t.Cleanup(func() { b.Close() })
 	return b
 }
-func smtpAddress(t *testing.T, b *mailboxBackend) string {
+func smtpAddress(t *testing.T, b *mailboxBackend, managers ...*mailboxManager) string {
 	t.Helper()
-	s, err := newSMTPServer(b, b.deliver)
+	s, err := newSMTPServer(b, b.deliver, managers...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +54,7 @@ func smtpAddress(t *testing.T, b *mailboxBackend) string {
 	t.Cleanup(func() { s.Close(); l.Close(); <-done })
 	return l.Addr().String()
 }
-func imapAddress(t *testing.T, b *mailboxBackend) string {
+func imapAddress(t *testing.T, b backend.Backend) string {
 	t.Helper()
 	cert, err := tls.LoadX509KeyPair("testdata/tls/server.crt", "testdata/tls/server.key")
 	if err != nil {
@@ -69,7 +70,7 @@ func imapAddress(t *testing.T, b *mailboxBackend) string {
 	t.Cleanup(func() { s.Close(); l.Close(); <-done })
 	return l.Addr().String()
 }
-func imapClient(t *testing.T, address string) *client.Client {
+func imapClient(t *testing.T, address string, credentials ...string) *client.Client {
 	t.Helper()
 	pem, err := os.ReadFile("testdata/tls/server.crt")
 	if err != nil {
@@ -83,7 +84,11 @@ func imapClient(t *testing.T, address string) *client.Client {
 	}
 	c.Timeout = 5 * time.Second
 	t.Cleanup(func() { c.Logout() })
-	if err := c.Login(mailboxUsername, mailboxPassword); err != nil {
+	username, password := mailboxUsername, mailboxPassword
+	if len(credentials) == 2 {
+		username, password = credentials[0], credentials[1]
+	}
+	if err := c.Login(username, password); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.Select("Sent", false); err != nil {

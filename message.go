@@ -36,6 +36,7 @@ type unsubscribeInfo struct {
 }
 
 type messageDetail struct {
+	MailboxID            string
 	ID                   string
 	MessageID            string
 	From                 *mail.Address
@@ -53,6 +54,7 @@ type messageDetail struct {
 }
 
 type messageSummary struct {
+	MailboxID            string
 	ID, MessageID        string
 	From                 *mail.Address
 	To, Cc, Bcc, ReplyTo []*mail.Address
@@ -67,6 +69,7 @@ type messageSummary struct {
 
 // Raw is immutable. Mutable fields and maps belong to the store mutex.
 type storedMessage struct {
+	MailboxID             string
 	Sequence              uint64
 	ID                    string
 	Folder                string
@@ -87,6 +90,7 @@ func (m *storedMessage) memory() *memory.Message {
 
 func (m *storedMessage) detail() messageDetail {
 	d := m.Detail
+	d.MailboxID = m.MailboxID
 	d.ID, d.Folder, d.UID, d.Username = m.ID, m.Folder, m.UID, m.Username
 	d.Tags = append([]string{}, m.Tags...)
 	d.Read = hasFlag(m.Flags, imap.SeenFlag)
@@ -99,7 +103,7 @@ func (m *storedMessage) summary() messageSummary {
 	if len(snippet) > 250 {
 		snippet = snippet[:250]
 	}
-	return messageSummary{ID: d.ID, MessageID: d.MessageID, From: d.From, To: d.To, Cc: d.Cc, Bcc: d.Bcc, ReplyTo: d.ReplyTo, Subject: d.Subject, Snippet: string(snippet), Created: m.Created, Size: d.Size, Attachments: len(d.Attachments), Tags: d.Tags, Read: d.Read, Username: d.Username, Folder: d.Folder, UID: d.UID}
+	return messageSummary{MailboxID: m.MailboxID, ID: d.ID, MessageID: d.MessageID, From: d.From, To: d.To, Cc: d.Cc, Bcc: d.Bcc, ReplyTo: d.ReplyTo, Subject: d.Subject, Snippet: string(snippet), Created: m.Created, Size: d.Size, Attachments: len(d.Attachments), Tags: d.Tags, Read: d.Read, Username: d.Username, Folder: d.Folder, UID: d.UID}
 }
 
 func hasFlag(flags []string, flag string) bool {

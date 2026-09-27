@@ -34,13 +34,14 @@ services:
 
 The database is bbolt, not a Mailpit SQLite file. Message MIME, flags, tags,
 folders, UIDs and UIDVALIDITY survive restart. Only one service process may own
-the file. Back up a stopped database or a consistent bbolt snapshot; copying an
-actively written file is not a supported backup procedure. Do not commit test
+the file. Provisioned accounts additionally use the sibling `mail.db.mailboxes/`
+directory. Stop the service and back up the entire data directory together;
+copying actively written files is not a supported backup procedure. Do not commit test
 mail or databases. Toxics and pending webhook notifications remain ephemeral.
 
 Use `MP_MAX_MESSAGES` (500 by default; 0 unlimited) and `MP_MAX_AGE=24h` for
 retention. Age is based on ingestion, not the original Date header. Retention
-applies to the entire mailbox; disable it for suites with shared concurrent mail.
+applies independently to each account; disable it for suites sharing an account.
 
 ## CI
 

@@ -44,6 +44,11 @@ func (u *mailboxUser) Logout() error    { return nil }
 func (u *mailboxUser) ListMailboxes(subscribed bool) ([]backend.Mailbox, error) {
 	u.store.mu.RLock()
 	defer u.store.mu.RUnlock()
+	select {
+	case <-u.store.done:
+		return nil, errors.New("mailbox is closed")
+	default:
+	}
 	names := []string{}
 	for name, f := range u.store.state.Folders {
 		if !subscribed || f.Subscribed {
@@ -63,6 +68,11 @@ func (u *mailboxUser) GetMailbox(name string) (backend.Mailbox, error) {
 	}
 	u.store.mu.RLock()
 	defer u.store.mu.RUnlock()
+	select {
+	case <-u.store.done:
+		return nil, errors.New("mailbox is closed")
+	default:
+	}
 	f, ok := u.store.state.Folders[name]
 	if !ok {
 		return nil, backend.ErrNoSuchMailbox
@@ -73,6 +83,9 @@ func validFolder(name string) bool {
 	return name != "" && len(name) <= 255 && !strings.ContainsAny(name, "\r\n\x00") && !strings.HasPrefix(name, "/") && !strings.HasSuffix(name, "/")
 }
 func (u *mailboxUser) CreateMailbox(name string) error {
+	if strings.EqualFold(name, "INBOX") {
+		name = "INBOX"
+	}
 	if !validFolder(name) {
 		return errors.New("invalid folder name")
 	}
@@ -161,6 +174,11 @@ func (m *mailbox) SetSubscribed(subscribed bool) error {
 func (m *mailbox) Status(items []imap.StatusItem) (*imap.MailboxStatus, error) {
 	m.store.mu.RLock()
 	defer m.store.mu.RUnlock()
+	select {
+	case <-m.store.done:
+		return nil, errors.New("mailbox is closed")
+	default:
+	}
 	f, ok := m.store.state.Folders[m.name]
 	if !ok {
 		return nil, backend.ErrNoSuchMailbox
@@ -186,6 +204,11 @@ func (m *mailbox) Status(items []imap.StatusItem) (*imap.MailboxStatus, error) {
 func (m *mailbox) records() ([]*storedMessage, error) {
 	m.store.mu.RLock()
 	defer m.store.mu.RUnlock()
+	select {
+	case <-m.store.done:
+		return nil, errors.New("mailbox is closed")
+	default:
+	}
 	if _, ok := m.store.state.Folders[m.name]; !ok {
 		return nil, backend.ErrNoSuchMailbox
 	}

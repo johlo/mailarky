@@ -8,7 +8,7 @@ byte-for-byte implementation or configuration compatibility.
 | Capability | Implementation |
 | --- | --- |
 | SMTP capture | ESMTP, UTF-8, configurable size limit, PLAIN/LOGIN auth, optional/required STARTTLS or implicit TLS |
-| Shared mailbox | HTTP + TLS IMAP, folders, raw MIME, flags, attachments and envelope metadata |
+| Shared mailbox | API-provisioned independent accounts, HTTP + TLS IMAP, folders, raw MIME, flags, attachments and envelope metadata |
 | Message API | List/search/detail/headers/raw/parts/thumbnails, read/unread, delete, latest alias |
 | Send/import | JSON composition with MIME attachments, raw import, fixtures, IMAP APPEND, sendmail client |
 | Search | AND/quoted phrases/negation, address/header/body, tag, read, attachment, size/date filters and timezone |
@@ -26,14 +26,16 @@ byte-for-byte implementation or configuration compatibility.
 
 - HTTP listens on 8026, not Mailpit's conventional 8025. There is no UI at `/`;
   it returns service metadata. `/api/v1/webui` returns capabilities only.
-- SMTP mail goes into Sent by default, configurable to another existing folder.
+- SMTP mail goes into Sent by default; the configured folder is created at startup.
+  Exact recipient bindings select independent accounts. Mixed-account SMTP
+  transactions are rejected, and sender toxics run at first RCPT once routed.
 - Global chaos updates/options fail explicitly. Connection-wide/authentication
   failures cannot isolate individual messages and are not available as toxics.
 - Toxics are ephemeral. There is no global reset endpoint for them.
 - bbolt files are not compatible with Mailpit SQLite databases. Move message MIME
   via `/api/v1/message/{id}/raw` and `/api/v1/messages/raw` instead.
 - API IDs are UUIDs. HTTP Created is ingestion time; Date is the original header.
-  Folder and UID are additional response fields.
+  MailboxID, Folder and UID are additional response fields.
 - The HTML checker detects features heuristically from DOM/CSS and scores the
   bundled Can I Email records equally per client/version. It does not reproduce
   Mailpit's detector/scoring algorithm or render screenshots. Unknown/unmatched
@@ -45,7 +47,7 @@ byte-for-byte implementation or configuration compatibility.
   `mail_emulator_` prefix. Only documented settings are accepted.
 - Sendmail mode is a local unauthenticated SMTP submission client; use a normal
   SMTP client for authenticated submission.
-- Retention is mailbox-wide. Disable it in a shared concurrent test suite, and
+- Retention is per account. Disable it in a shared concurrent test suite, and
   clean up by owned IDs. Webhook queues are bounded and not persisted.
 
 Public contract references: [Mailpit API](https://mailpit.axllent.org/docs/api-v1/),
