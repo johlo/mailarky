@@ -81,7 +81,7 @@ update the Docker health check too.
 | --- | --- | --- |
 | `webhook_url` | `--webhook-url` / `MP_WEBHOOK_URL` | POST a summary of each new message |
 | `webhook_delay`, `webhook_interval` | `--webhook-delay`, `--webhook-limit` / `MP_WEBHOOK_DELAY`, `MP_WEBHOOK_LIMIT` | Delay and minimum interval (seconds in env) |
-| `label` | `--label` / `MP_LABEL` | Sent as the `Mailpit-Label` webhook header |
+| `label` | `--label` / `MP_LABEL` | Sent as the `Mail-Sandbox-Label` webhook header |
 | `tags_disable` | `--tags-disable` / `MP_TAGS_DISABLE` | `x-tags`, `plus-addresses` |
 | `tags_config`, `tag` | `--tags-config`, `--tag` / `MP_TAGS_CONFIG`, `MP_TAG` | Automatic tagging rules |
 | `tags_username`, `tags_title_case` | `--tags-username`, `--tags-title-case` / `MP_TAGS_USERNAME`, `MP_TAGS_TITLE_CASE` | Tag by SMTP username; title-case tags |

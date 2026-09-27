@@ -562,6 +562,9 @@ func TestWebhooksWebsocketAndMetrics(t *testing.T) {
 			w.WriteHeader(503)
 			return
 		}
+		if got := r.Header.Get("Mail-Sandbox-Label"); got != "ci" {
+			t.Errorf("label header %q", got)
+		}
 		var m messageSummary
 		json.NewDecoder(r.Body).Decode(&m)
 		webhooks <- m
@@ -570,6 +573,7 @@ func TestWebhooksWebsocketAndMetrics(t *testing.T) {
 	c := defaultConfig()
 	c.WebhookURL = receiver.URL
 	c.WebhookLimit = 0
+	c.Label = "ci"
 	c.EnableMetrics = true
 	b := testStore(t, c)
 	stop := b.startWorkers(context.Background())

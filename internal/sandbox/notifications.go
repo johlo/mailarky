@@ -108,7 +108,7 @@ func (b *mailboxBackend) startWorkers(ctx context.Context) func() {
 						req.Header.Set("Content-Type", "application/json")
 						req.Header.Set("Mail-Sandbox-Mailbox", b.config.MailboxID)
 						if b.config.Label != "" {
-							req.Header.Set("Mailpit-Label", b.config.Label)
+							req.Header.Set("Mail-Sandbox-Label", b.config.Label)
 						}
 						response, err := client.Do(req)
 						last = time.Now()
