@@ -14,7 +14,6 @@ node tests "Test suite / [tag]\[Person or CI job][/tag] / Drives the application
 
 // The optional systems share one column so their boxes line up.
 node optional ""  right of sandbox (gap: wide)  style: invisible  contents: (widths: match)
-node optional.relay "SMTP server / [tag]\[External system][/tag] / Optional. Receives relayed and forwarded mail" (wrap: 26)  style: external
 node optional.hooks "Webhook receiver / [tag]\[External system][/tag] / Optional. Notified of new messages" (wrap: 26)  style: external
 node optional.spamd "SpamAssassin / [tag]\[External system][/tag] / Optional. Scores messages for spam checks" (wrap: 26)  style: external
 
@@ -22,6 +21,5 @@ edge tests -> app  "Triggers actions"  from: bottom  to: top  style: call
 edge tests -> sandbox  "Seeds mail, inspects it, injects faults / \[HTTP]"  from: bottom  to: top  style: call
 edge app -> sandbox  "Sends mail / \[SMTP]"  from: right  to: left  style: call
 edge sandbox -> app  "Reads the mailbox / \[IMAP over TLS]"  from: left  to: right  style: call
-edge sandbox -> optional.relay  "Relays mail \[SMTP]"  from: right  to: left  style: call
 edge sandbox -> optional.hooks  "Posts webhooks \[HTTP]"  from: right  to: left  style: call
 edge sandbox -> optional.spamd  "Checks spam \[spamd]"  from: right  to: left  style: call

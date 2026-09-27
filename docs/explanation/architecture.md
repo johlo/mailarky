@@ -12,14 +12,15 @@ and technology. Arrows show the direction of the request or data flow.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../architecture/context-dark.svg">
-  <img alt="System context: the test suite and the application under test use Mail Sandbox; optional SMTP server, webhook receiver and SpamAssassin" src="../architecture/context.svg">
+  <img alt="System context: the test suite and the application under test use Mail Sandbox; optional webhook receiver and SpamAssassin" src="../architecture/context.svg">
 </picture>
 
 - The application talks to the sandbox as it would to a real mail provider:
   it sends over SMTP and reads its mailbox over IMAP.
 - The test suite talks to the sandbox over HTTP only, to seed mail, check what
   arrived and inject faults.
-- Everything on the right is optional and off by default.
+- Everything on the right is optional and off by default. Captured mail is
+  never delivered onward.
 
 ## 2. Containers
 
@@ -51,7 +52,6 @@ and technology. Arrows show the direction of the request or data flow.
 | Message store | `store.go`, `message.go` | One per account: raw MIME, folders, UIDs, flags, tags |
 | Toxic registry | `toxics.go` | One per account: message-scoped faults |
 | Notifications | `notifications.go` | WebSocket events and webhooks |
-| Relay and forwarding | `relay.go` | Opt-in onward delivery |
 | Diagnostics | `diagnostics.go`, `htmlcheck.go` | Link, HTML compatibility and spam checks |
 
 All code is in `internal/sandbox/`. The key design choice is that every

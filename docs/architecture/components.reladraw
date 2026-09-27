@@ -21,14 +21,12 @@ node svc.account "Account [tag]\[one per mailbox][/tag]"  below svc.manager (gap
 node svc.account.store "Message store / [tag]\[Component][/tag] / Raw MIME, folders, UIDs, flags and tags. One append path for every protocol" (wrap: 28)  style: component
 node svc.account.toxics "Toxic registry / [tag]\[Component][/tag] / Message-scoped faults, consulted by SMTP and IMAP" (wrap: 28)  right of svc.account.store  level with svc.account.store  style: component
 
-node svc.relay "Relay and forwarding / [tag]\[Component][/tag] / Opt-in onward delivery of captured mail" (wrap: 24)  left of svc.account  level with svc.account  style: component
 node svc.diag "Diagnostics / [tag]\[Component][/tag] / Link, HTML compatibility and spam checks" (wrap: 24)  right of svc.http  style: component
 node svc.notify "Notifications / [tag]\[Component][/tag] / WebSocket stream and webhooks" (wrap: 24)  right of svc.account  level with svc.account  style: component
 
 node app "Application under test / [tag]\[External system][/tag]" (wrap: 26)  above svc.smtp and svc.imap (gap: wide)  style: external
 node tests "Test suite / [tag]\[Person or CI job][/tag]" (wrap: 26)  above svc.http (gap: wide)  level with app  style: person
 node db "Message database / [tag]\[Container: bbolt files][/tag]" (wrap: 30)  below svc.account (gap: wide)  style: store
-node upstream "SMTP server / [tag]\[External system][/tag]" (wrap: 20)  left of svc (gap: wide)  level with svc.relay  style: external
 node spamd "SpamAssassin / [tag]\[External system][/tag]" (wrap: 20)  right of svc (gap: wide)  level with svc.diag  style: external
 node hooks "Webhook receiver / [tag]\[External system][/tag]" (wrap: 20)  right of svc (gap: wide)  level with svc.notify  style: external
 
@@ -43,8 +41,6 @@ edge svc.manager -> svc.account  "Selects account"  from: bottom  to: top  style
 edge svc.account -> svc.notify  "Emits events"  from: right  to: left  style: call
 edge svc.account.store -> db  "Persists \[bbolt]"  from: bottom  to: top  style: call
 
-edge svc.smtp -> svc.relay  "Hands over captured mail"  from: left  to: top  style: call
 edge svc.http -> svc.diag  "Runs checks"  from: right  to: left  style: call
-edge svc.relay -> upstream  "Delivers \[SMTP]"  from: left  to: right  style: call
 edge svc.diag -> spamd  "Scores \[spamd]"  from: right  to: left  style: call
 edge svc.notify -> hooks  "Posts \[HTTP]"  from: right  to: left  style: call

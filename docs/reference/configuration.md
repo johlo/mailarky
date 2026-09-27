@@ -15,7 +15,7 @@ Unknown YAML keys and flags stop startup.
 | SMTP deliveries | Stored in `Sent` |
 | Authentication | None on SMTP or HTTP |
 | Storage | In memory, at most 500 messages, 50 MiB per message |
-| Outbound mail | Disabled |
+| Outbound mail | Never sent. The sandbox has no relay. |
 
 ## Settings
 
@@ -100,36 +100,6 @@ supports PLAIN and LOGIN.
 
 Accounts created through `/api/v1/mailboxes` have their own IMAP credentials.
 They use the server-wide SMTP and HTTP settings above.
-
-## Relay and forwarding
-
-Off by default. **Relay** delivers captured mail onward, either when you call
-`/release` or automatically (`relay_all` / `relay_matching`). **Forwarding**
-copies every message to fixed addresses. Configure them with nested `relay` /
-`forward` YAML, or a separate YAML file named by `MP_SMTP_RELAY_CONFIG` /
-`MP_SMTP_FORWARD_CONFIG`:
-
-```yaml
-host: smtp.example.test
-port: 25                    # default
-auth: none                  # none, plain, login, cram-md5
-username: ''
-password: ''
-secret: ''                  # CRAM-MD5 secret
-starttls: false             # starttls and tls are mutually exclusive
-tls: false
-allow-insecure: false       # skip TLS verification
-return-path: ''
-override-from: ''
-allowed-recipients: ''      # regex, for manual release
-blocked-recipients: ''      # regex, always applied
-preserve-message-ids: false
-forward-smtp-errors: false  # return delivery failures to the SMTP client
-to: copy@example.test       # forwarding only
-```
-
-Every key also has an `MP_SMTP_RELAY_*` / `MP_SMTP_FORWARD_*` variable
-(uppercase, underscores). Don't point relay or forwarding back at the sandbox.
 
 ## Previous environment names
 

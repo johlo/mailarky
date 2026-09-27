@@ -31,7 +31,7 @@ Use Mail Sandbox when the code under test does more than send email:
 | HTTP inspection API | Search with a filter syntax (`to:`, `subject:`, `message-id:`, …), then read message details, raw MIME, attachments, tags and read flags. |
 | Test data seeding | Add JSON fixtures, import raw `.eml` files or use IMAP `APPEND`, with any `Date` and `Message-ID`. Reusing a Message-ID in two folders tests deduplication. |
 | Realistic IMAP | Implicit TLS with a bundled test certificate, stable UIDs, and a UIDVALIDITY that changes when in-memory state is lost on restart. It exercises the same client code as production. |
-| Safe by default | Mail is stored in memory and never leaves the sandbox. Persistence (bbolt), relay and forwarding are available but must be turned on explicitly. |
+| Safe by default | Mail never leaves the sandbox: there is no relay or forwarding. Storage is in memory unless you turn on persistence (bbolt). |
 
 Other features are WebSocket and webhook notifications, retention limits,
 HTML compatibility and link checks, Prometheus metrics, and optional SMTP/HTTP
@@ -42,7 +42,7 @@ for the full list.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/architecture/context-dark.svg">
-  <img alt="System context: the test suite and the application under test use Mail Sandbox; optional SMTP server, webhook receiver and SpamAssassin" src="docs/architecture/context.svg">
+  <img alt="System context: the test suite and the application under test use Mail Sandbox; optional webhook receiver and SpamAssassin" src="docs/architecture/context.svg">
 </picture>
 
 The [architecture page](docs/explanation/architecture.md) zooms in on the

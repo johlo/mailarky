@@ -39,7 +39,6 @@ Start with `docker compose logs mail-sandbox`, `GET /api/v1/info`,
 | --- | --- |
 | Link or CSS check rejects localhost | Set `MP_ALLOW_INTERNAL_HTTP_REQUESTS=true`. |
 | Spam check unavailable | Set `MP_SPAMASSASSIN` to a reachable spamd `host:port`. |
-| Relay fails | Check the relay config, recipients, credentials and TLS trust. |
 
 `/healthz` only shows that the sandbox is up. In end-to-end tests, wait for
 your application's result instead.

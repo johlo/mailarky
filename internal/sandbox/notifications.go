@@ -172,7 +172,7 @@ func (a *httpAPI) info(w http.ResponseWriter, r *http.Request) {
 }
 func (a *httpAPI) capabilities(w http.ResponseWriter, r *http.Request) {
 	c := a.store.config
-	jsonResponse(w, 200, map[string]any{"Label": c.Label, "ChaosEnabled": false, "MessageScopedToxics": true, "MailboxManagement": a.manager != nil, "WebUI": false, "DuplicatesIgnored": c.IgnoreDuplicates, "SpamAssassin": c.SpamAssassin != "", "MessageRelay": map[string]any{"Enabled": c.Relay.Host != "", "SMTPServer": c.Relay.Host, "AllowedRecipients": c.Relay.AllowedRecipients, "BlockedRecipients": c.Relay.BlockedRecipients, "PreserveMessageIDs": c.Relay.PreserveMessageIDs, "ReturnPath": c.Relay.ReturnPath, "OverrideFrom": c.Relay.OverrideFrom}})
+	jsonResponse(w, 200, map[string]any{"Label": c.Label, "ChaosEnabled": false, "MessageScopedToxics": true, "MailboxManagement": a.manager != nil, "WebUI": false, "DuplicatesIgnored": c.IgnoreDuplicates, "SpamAssassin": c.SpamAssassin != ""})
 }
 func (a *httpAPI) metrics(w http.ResponseWriter, r *http.Request) {
 	if !a.store.config.EnableMetrics {

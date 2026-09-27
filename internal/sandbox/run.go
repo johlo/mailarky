@@ -30,7 +30,7 @@ func run(ctx context.Context, c configuration) error {
 		return err
 	}
 	api.manager = manager
-	smtpServer, err := newSMTPServer(b, b.deliver, manager)
+	smtpServer, err := newSMTPServer(b, manager)
 	if err != nil {
 		return err
 	}

@@ -206,9 +206,5 @@ func (a *httpAPI) send(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, 400, map[string]string{"Error": err.Error()})
 		return
 	}
-	if err := a.store.deliver(r.Context(), m); err != nil {
-		jsonResponse(w, 502, map[string]string{"Error": "configured delivery failed"})
-		return
-	}
 	jsonResponse(w, 200, map[string]string{"ID": m.ID, "MessageID": m.Detail.MessageID})
 }

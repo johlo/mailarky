@@ -82,7 +82,6 @@ func (a *httpAPI) handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/message/{id}/headers", a.headers)
 	mux.HandleFunc("GET /api/v1/message/{id}/part/{part}", a.part)
 	mux.HandleFunc("GET /api/v1/message/{id}/part/{part}/thumb", a.thumbnail)
-	mux.HandleFunc("POST /api/v1/message/{id}/release", a.release)
 	mux.HandleFunc("GET /api/v1/message/{id}/link-check", a.linkCheck)
 	mux.HandleFunc("GET /api/v1/message/{id}/html-check", a.htmlCheck)
 	mux.HandleFunc("GET /api/v1/message/{id}/sa-check", a.spamCheck)
@@ -647,22 +646,6 @@ func (a *httpAPI) view(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (a *httpAPI) release(w http.ResponseWriter, r *http.Request) {
-	m := a.requireMessage(w, r)
-	if m == nil {
-		return
-	}
-	var body struct{ To []string }
-	if err := decodeJSON(w, r, 64<<10, &body); err != nil {
-		apiError(w, 400, err)
-		return
-	}
-	if err := relayMessage(r.Context(), a.store.config.Relay, m, body.To, true); err != nil {
-		apiError(w, 400, err)
-		return
-	}
-	w.Write([]byte("ok\n"))
-}
 func (a *httpAPI) importRaw(w http.ResponseWriter, r *http.Request) {
 	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, a.store.config.MaxSize))
 	if err != nil {

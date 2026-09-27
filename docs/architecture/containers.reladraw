@@ -18,7 +18,6 @@ node app "Application under test / [tag]\[External system][/tag] / Sends email a
 node tests "Test suite / [tag]\[Person or CI job][/tag] / Drives the application and asserts on its mail" (wrap: 26)  above app and sb (gap: wide)  style: person
 
 node optional ""  right of sb (gap: wide)  level with sb.service  style: invisible  contents: (widths: match)
-node optional.relay "SMTP server / [tag]\[External system][/tag] / Optional. Receives relayed and forwarded mail" (wrap: 26)  style: external
 node optional.hooks "Webhook receiver / [tag]\[External system][/tag] / Optional. Notified of new messages" (wrap: 26)  style: external
 node optional.spamd "SpamAssassin / [tag]\[External system][/tag] / Optional. Scores messages for spam checks" (wrap: 26)  style: external
 
@@ -28,6 +27,5 @@ edge app -> sb.service  "Sends mail / \[SMTP]"  from: right  to: left  style: ca
 edge sb.service -> app  "Reads the mailbox / \[IMAP over TLS]"  from: left  to: right  style: call
 edge sb.sendmail -> sb.service  "Submits mail / \[SMTP]"  from: top  to: left  style: call
 edge sb.service -> sb.db  "Reads and writes / \[bbolt]"  from: bottom  to: top  style: call
-edge sb.service -> optional.relay  "Relays mail \[SMTP]"  from: right  to: left  style: call
 edge sb.service -> optional.hooks  "Posts webhooks \[HTTP]"  from: right  to: left  style: call
 edge sb.service -> optional.spamd  "Checks spam \[spamd]"  from: right  to: left  style: call

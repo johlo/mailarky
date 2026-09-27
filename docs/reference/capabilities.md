@@ -12,7 +12,6 @@
 | Storage | In memory or bbolt on disk; retention by count or age; optional duplicate suppression; `.eml` dumps |
 | Notifications | WebSocket stream and webhooks with retry |
 | Failure simulation | Per-message SMTP reject/delay and IMAP delay/hide/header change ([toxics](../how-to/toxics.md)) |
-| Outbound | Opt-in relay (manual or automatic) and forwarding |
 | Checks | Link validation, HTML/CSS email client compatibility, SpamAssassin, unsubscribe headers |
 | Operations | HTTP TLS and auth, CORS, allowed hosts, path prefix, health probes, Prometheus metrics |
 
@@ -24,6 +23,7 @@
 - Global failure modes. Faults always target specific messages.
 - Connection-level or authentication failures as toxics
 - Several processes sharing one database
+- Relay or forwarding. Captured mail is never delivered onward.
 
 ## Worth knowing
 

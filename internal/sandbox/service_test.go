@@ -16,7 +16,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -41,7 +40,7 @@ func testStore(t *testing.T, c configuration) *mailboxBackend {
 }
 func smtpAddress(t *testing.T, b *mailboxBackend, managers ...*mailboxManager) string {
 	t.Helper()
-	s, err := newSMTPServer(b, b.deliver, managers...)
+	s, err := newSMTPServer(b, managers...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -518,42 +517,6 @@ func TestSMTPAuthenticationAndSTARTTLS(t *testing.T) {
 	}
 }
 
-func TestRelayForwardAndRecipientRestrictions(t *testing.T) {
-	destination := testStore(t, defaultConfig())
-	addr := smtpAddress(t, destination)
-	host, port, _ := net.SplitHostPort(addr)
-	p, _ := strconv.Atoi(port)
-	c := defaultConfig()
-	c.Relay = relayConfig{Host: host, Port: p, AllowedRecipients: `^allowed@`, BlockedRecipients: `^blocked@`}
-	c.RelayMatching = `@forward.test$`
-	b := testStore(t, c)
-	address := smtpAddress(t, b)
-	if err := smtp.SendMail(address, nil, "sender@example.test", []string{"allowed@forward.test", "ignored@example.test"}, testRaw("relay@test", "a", "allowed@forward.test")); err != nil {
-		t.Fatal(err)
-	}
-	got := destination.snapshot()
-	if len(got) != 1 || len(got[0].EnvelopeTo) != 1 || got[0].EnvelopeTo[0] != "allowed@forward.test" {
-		t.Fatalf("auto relay: %+v", got)
-	}
-	id := b.snapshot()[0].ID
-	apiCall(t, controlHandler(b), "POST", "/api/v1/message/"+id+"/release", map[string]any{"To": []string{"blocked@example.test"}}, 400)
-	apiCall(t, controlHandler(b), "POST", "/api/v1/message/"+id+"/release", map[string]any{"To": []string{"allowed@example.test"}}, 200)
-	got = destination.snapshot()
-	if len(got) != 2 || got[1].Detail.MessageID == "relay@test" {
-		t.Fatal("manual relay did not replace Message-ID")
-	}
-	if b.get(id).Detail.MessageID != "relay@test" {
-		t.Fatal("release mutated original")
-	}
-	b.config.Forward = relayConfig{Host: host, Port: p, To: "copy@example.test"}
-	if err := b.deliver(context.Background(), b.get(id)); err != nil {
-		t.Fatal(err)
-	}
-	if len(destination.snapshot()) != 4 {
-		t.Fatal("forward/relay did not both deliver")
-	}
-}
-
 func TestWebhooksWebsocketAndMetrics(t *testing.T) {
 	webhooks := make(chan messageSummary, 2)
 	var calls atomic.Int32
@@ -669,11 +632,6 @@ func TestConfigurationAndHTTPAuthentication(t *testing.T) {
 		t.Fatal("global chaos accepted")
 	}
 	t.Setenv("MP_ENABLE_CHAOS", "false")
-	t.Setenv("MP_SMTP_RELAY_MATCHING", "[")
-	if _, err := loadConfig(nil); err == nil {
-		t.Fatal("bad regex accepted")
-	}
-	t.Setenv("MP_SMTP_RELAY_MATCHING", "")
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	os.WriteFile(path, []byte("max_message_bytes: 1024\nmax_messages: 0\n"), 0600)
 	t.Setenv("MAIL_SANDBOX_CONFIG", path)

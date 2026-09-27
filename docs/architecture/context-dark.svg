@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1271" height="536" viewBox="0 0 1271 536" font-family="'DejaVu Sans Mono', 'Menlo', 'Consolas', 'Liberation Mono', 'Courier New', monospace" font-size="14px">
+<svg xmlns="http://www.w3.org/2000/svg" width="1262" height="479" viewBox="0 0 1262 479" font-family="'DejaVu Sans Mono', 'Menlo', 'Consolas', 'Liberation Mono', 'Courier New', monospace" font-size="14px">
   <defs>
     <marker id="arrow-5c5c7c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#5c5c7c"/>
@@ -7,7 +7,7 @@
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#5c5c7c"/>
     </marker>
   </defs>
-  <rect x="0" y="0" width="1271" height="536" fill="#111111"/>
+  <rect x="0" y="0" width="1262" height="479" fill="#111111"/>
   <path d="M481.4 254 H737.4 a8 8 0 0 1 8 8 V369 a8 8 0 0 1 -8 8 H481.4 a8 8 0 0 1 -8 -8 V262 a8 8 0 0 1 8 -8 Z" fill="#142814" stroke="#486544"/>
   <text x="609.4" y="282.4" fill="#d9d9d9" text-anchor="middle">Mail Sandbox</text>
   <text x="609.4" y="301.4" fill="#8b8b8b" text-anchor="middle">[Software system]</text>
@@ -24,23 +24,18 @@
   <text x="392.7" y="87.4" fill="#8b8b8b" text-anchor="middle">[Person or CI job]</text>
   <text x="392.7" y="106.4" fill="#d9d9d9" text-anchor="middle">Drives the application and</text>
   <text x="392.7" y="125.4" fill="#d9d9d9" text-anchor="middle">asserts on its mail</text>
-  <path d="M963.8 135.5 H1222.8 a8 8 0 0 1 8 8 V487.5 a8 8 0 0 1 -8 8 H963.8 a8 8 0 0 1 -8 -8 V143.5 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
+  <path d="M963.8 192.5 H1213.8 a8 8 0 0 1 8 8 V430.5 a8 8 0 0 1 -8 8 H963.8 a8 8 0 0 1 -8 -8 V200.5 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
 
-  <path d="M977.8 149.5 H1208.8 a8 8 0 0 1 8 8 V245.5 a8 8 0 0 1 -8 8 H977.8 a8 8 0 0 1 -8 -8 V157.5 a8 8 0 0 1 8 -8 Z" fill="#191728" stroke="#4f5367"/>
-  <text x="1093.3" y="177.9" fill="#d9d9d9" text-anchor="middle">SMTP server</text>
-  <text x="1093.3" y="196.9" fill="#8b8b8b" text-anchor="middle">[External system]</text>
-  <text x="1093.3" y="215.9" fill="#d9d9d9" text-anchor="middle">Optional. Receives relayed</text>
-  <text x="1093.3" y="234.9" fill="#d9d9d9" text-anchor="middle">and forwarded mail</text>
-  <path d="M977.8 263.5 H1208.8 a8 8 0 0 1 8 8 V359.5 a8 8 0 0 1 -8 8 H977.8 a8 8 0 0 1 -8 -8 V271.5 a8 8 0 0 1 8 -8 Z" fill="#191728" stroke="#4f5367"/>
-  <text x="1093.3" y="291.9" fill="#d9d9d9" text-anchor="middle">Webhook receiver</text>
-  <text x="1093.3" y="310.9" fill="#8b8b8b" text-anchor="middle">[External system]</text>
-  <text x="1093.3" y="329.9" fill="#d9d9d9" text-anchor="middle">Optional. Notified of new</text>
-  <text x="1093.3" y="348.9" fill="#d9d9d9" text-anchor="middle">messages</text>
-  <path d="M977.8 377.5 H1208.8 a8 8 0 0 1 8 8 V473.5 a8 8 0 0 1 -8 8 H977.8 a8 8 0 0 1 -8 -8 V385.5 a8 8 0 0 1 8 -8 Z" fill="#191728" stroke="#4f5367"/>
-  <text x="1093.3" y="405.9" fill="#d9d9d9" text-anchor="middle">SpamAssassin</text>
-  <text x="1093.3" y="424.9" fill="#8b8b8b" text-anchor="middle">[External system]</text>
-  <text x="1093.3" y="443.9" fill="#d9d9d9" text-anchor="middle">Optional. Scores messages</text>
-  <text x="1093.3" y="462.9" fill="#d9d9d9" text-anchor="middle">for spam checks</text>
+  <path d="M977.8 206.5 H1199.8 a8 8 0 0 1 8 8 V302.5 a8 8 0 0 1 -8 8 H977.8 a8 8 0 0 1 -8 -8 V214.5 a8 8 0 0 1 8 -8 Z" fill="#191728" stroke="#4f5367"/>
+  <text x="1088.8" y="234.9" fill="#d9d9d9" text-anchor="middle">Webhook receiver</text>
+  <text x="1088.8" y="253.9" fill="#8b8b8b" text-anchor="middle">[External system]</text>
+  <text x="1088.8" y="272.9" fill="#d9d9d9" text-anchor="middle">Optional. Notified of new</text>
+  <text x="1088.8" y="291.9" fill="#d9d9d9" text-anchor="middle">messages</text>
+  <path d="M977.8 320.5 H1199.8 a8 8 0 0 1 8 8 V416.5 a8 8 0 0 1 -8 8 H977.8 a8 8 0 0 1 -8 -8 V328.5 a8 8 0 0 1 8 -8 Z" fill="#191728" stroke="#4f5367"/>
+  <text x="1088.8" y="348.9" fill="#d9d9d9" text-anchor="middle">SpamAssassin</text>
+  <text x="1088.8" y="367.9" fill="#8b8b8b" text-anchor="middle">[External system]</text>
+  <text x="1088.8" y="386.9" fill="#d9d9d9" text-anchor="middle">Optional. Scores messages</text>
+  <text x="1088.8" y="405.9" fill="#d9d9d9" text-anchor="middle">for spam checks</text>
   <path d="M 384.7 144 C 384.7 246.15, 159 161.35, 159 263.5" fill="none" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#arrow-5c5c7c)"/>
   <rect x="208.85" y="195.75" width="126" height="16" fill="#111111"/>
   <g font-size="12px">
@@ -64,19 +59,14 @@
   <text x="375.7" y="327.7" fill="#8b8b8b" text-anchor="middle">Reads the mailbox</text>
   <text x="375.7" y="343.7" fill="#8b8b8b" text-anchor="middle">[IMAP over TLS]</text>
   </g>
-  <path d="M 745.4 299.5 C 843.35 299.5, 871.85 201.5, 969.8 201.5" fill="none" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#arrow-5c5c7c)"/>
-  <rect x="787.6" y="242.5" width="140" height="16" fill="#111111"/>
+  <path d="M 745.4 307.5 C 837.28 307.5, 877.92 258.5, 969.8 258.5" fill="none" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#arrow-5c5c7c)"/>
+  <rect x="776.6" y="275" width="162" height="16" fill="#111111"/>
   <g font-size="12px">
-  <text x="857.6" y="254.7" fill="#8b8b8b" text-anchor="middle">Relays mail [SMTP]</text>
+  <text x="857.6" y="287.2" fill="#8b8b8b" text-anchor="middle">Posts webhooks [HTTP]</text>
   </g>
-  <path d="M 745.4 315.5 C 835.16 315.5, 880.04 315.5, 969.8 315.5" fill="none" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#arrow-5c5c7c)"/>
-  <rect x="776.6" y="307.5" width="162" height="16" fill="#111111"/>
+  <path d="M 745.4 323.5 C 837.28 323.5, 877.92 372.5, 969.8 372.5" fill="none" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#arrow-5c5c7c)"/>
+  <rect x="784.1" y="340" width="147" height="16" fill="#111111"/>
   <g font-size="12px">
-  <text x="857.6" y="319.7" fill="#8b8b8b" text-anchor="middle">Posts webhooks [HTTP]</text>
-  </g>
-  <path d="M 745.4 331.5 C 843.35 331.5, 871.85 429.5, 969.8 429.5" fill="none" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#arrow-5c5c7c)"/>
-  <rect x="784.1" y="372.5" width="147" height="16" fill="#111111"/>
-  <g font-size="12px">
-  <text x="857.6" y="384.7" fill="#8b8b8b" text-anchor="middle">Checks spam [spamd]</text>
+  <text x="857.6" y="352.2" fill="#8b8b8b" text-anchor="middle">Checks spam [spamd]</text>
   </g>
 </svg>

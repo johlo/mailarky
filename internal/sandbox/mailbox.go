@@ -407,7 +407,7 @@ func (m *mailbox) Expunge() error {
 }
 
 // Replace only complete header fields; body bytes and unrelated MIME headers
-// stay untouched. Used by explicitly configured relay policies and toxics.
+// stay untouched. Used by IMAP header toxics and sendmail Bcc removal.
 func replaceHeaders(raw []byte, replacements map[string]string) []byte {
 	separator := bytes.Index(raw, []byte("\r\n\r\n"))
 	if separator < 0 {

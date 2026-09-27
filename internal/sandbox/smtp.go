@@ -62,7 +62,6 @@ type smtpBackend struct {
 	store   *mailboxBackend
 	manager *mailboxManager
 	users   credentials
-	deliver func(context.Context, *storedMessage) error
 }
 type smtpSession struct {
 	backend       *smtpBackend
@@ -238,31 +237,21 @@ func (s *smtpSession) Data(reader io.Reader) error {
 	if err := s.fault("data", raw); err != nil {
 		return err
 	}
-	m, err := b.append(raw, appendOptions{Folder: b.config.SMTPFolder, From: s.from, To: s.recipients, Username: s.username, Notify: true})
-	if err != nil {
+	if _, err := b.append(raw, appendOptions{Folder: b.config.SMTPFolder, From: s.from, To: s.recipients, Username: s.username, Notify: true}); err != nil {
 		b.rejected.Add(1)
 		return &smtp.SMTPError{Code: 554, Message: "Message could not be stored"}
-	}
-	deliver := s.backend.deliver
-	if s.backend.manager != nil {
-		deliver = b.deliver
-	}
-	if deliver != nil {
-		if err := deliver(context.Background(), m); err != nil {
-			return &smtp.SMTPError{Code: 451, Message: "Configured delivery failed"}
-		}
 	}
 	b.accepted.Add(1)
 	b.acceptedSize.Add(uint64(len(raw)))
 	return nil
 }
 
-func newSMTPServer(b *mailboxBackend, deliver func(context.Context, *storedMessage) error, managers ...*mailboxManager) (*smtp.Server, error) {
+func newSMTPServer(b *mailboxBackend, managers ...*mailboxManager) (*smtp.Server, error) {
 	users, err := readCredentials(b.config.SMTPAuthFile, b.config.SMTPAuth)
 	if err != nil {
 		return nil, err
 	}
-	back := &smtpBackend{store: b, users: users, deliver: deliver}
+	back := &smtpBackend{store: b, users: users}
 	if len(managers) > 0 {
 		back.manager = managers[0]
 	}

@@ -29,5 +29,5 @@ Pin this repository as a Git submodule, or pin a built image. To run several
 stacks side by side, change the published host ports and keep the container
 ports as they are ([run and test](run-and-test.md)).
 
-Outbound relay and forwarding are off by default. A test stack needs no real
-mail credentials.
+The sandbox never delivers mail onward, so a test stack needs no real mail
+credentials and can't email real people.

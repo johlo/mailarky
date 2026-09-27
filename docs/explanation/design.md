@@ -44,4 +44,4 @@ IMAP toxics change the response, never the stored message.
 
 A single-process test double. There is no clustering. Webhooks and WebSocket
 events are best-effort, so poll the API when a test needs a definite answer.
-Relay and forwarding are separate from capture and must be turned on explicitly.
+Captured mail is never delivered onward, so a test stack can't send real email.

@@ -434,7 +434,7 @@ components:
       scheme: basic
       type: http
 info:
-  description: Independent shared SMTP, TLS IMAP and HTTP test mailbox. No browser UI or POP3. Message-scoped toxics isolate concurrent test traffic. Outbound mail is disabled unless relay/forwarding is configured. Default memory storage; optional bbolt persistence. Provision independent accounts at /api/v1/mailboxes and prefix standard routes with the returned api_base. Root routes address the default mailbox only. SMTP recipient routing selects the mailbox at RCPT TO; sender-stage toxics are therefore evaluated at the first RCPT, not MAIL FROM.
+  description: Independent shared SMTP, TLS IMAP and HTTP test mailbox. No browser UI or POP3. Message-scoped toxics isolate concurrent test traffic. Mail never leaves the sandbox. Default memory storage; optional bbolt persistence. Provision independent accounts at /api/v1/mailboxes and prefix standard routes with the returned api_base. Root routes address the default mailbox only. SMTP recipient routing selects the mailbox at RCPT TO; sender-stage toxics are therefore evaluated at the first RCPT, not MAIL FROM.
   title: Mail Sandbox
   version: 2.1.0
 openapi: 3.1.0
@@ -1061,56 +1061,6 @@ paths:
                 type: string
           description: Resource not found
       summary: Download original MIME
-  /api/v1/message/{id}/release:
-    post:
-      description: Explicit recipients required. Restrictions apply; Message-ID is replaced unless preserve-message-ids is enabled. Stored original is unchanged.
-      operationId: postApiV1MessageIdRelease
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              additionalProperties: false
-              properties:
-                To:
-                  items:
-                    type: string
-                  type: array
-              required:
-                - To
-              type: object
-        required: true
-      responses:
-        "200":
-          content:
-            text/plain:
-              schema:
-                type: string
-          description: Success
-        "400":
-          content:
-            text/plain:
-              schema:
-                type: string
-          description: Invalid request
-        "401":
-          content:
-            text/plain:
-              schema:
-                type: string
-          description: Configured authentication required
-        "404":
-          content:
-            text/plain:
-              schema:
-                type: string
-          description: Resource not found
-      summary: Release through the configured SMTP relay
   /api/v1/message/{id}/sa-check:
     get:
       description: id is a database UUID or latest. Inspection endpoints other than detail do not mark read.
@@ -1454,7 +1404,7 @@ paths:
       summary: List or search messages newest first
   /api/v1/send:
     post:
-      description: May deliver externally only if automatic relay/forwarding is configured. Errors use JSON Error; configured delivery failure returns 502 after capture.
+      description: Stores the message without delivering it anywhere. Errors use JSON Error.
       operationId: postApiV1Send
       requestBody:
         content:
@@ -1492,8 +1442,6 @@ paths:
               schema:
                 type: string
           description: Resource not found
-        "502":
-          description: Configured external delivery failed after capture
       summary: Compose and capture a MIME message
   /api/v1/tags:
     get:
@@ -2505,62 +2453,6 @@ paths:
                 type: string
           description: Resource not found
       summary: Download original MIME
-  /mailboxes/{mailbox}/api/v1/message/{id}/release:
-    post:
-      description: Explicit recipients required. Restrictions apply; Message-ID is replaced unless preserve-message-ids is enabled. Stored original is unchanged.
-      operationId: mailboxPostApiV1MessageIdRelease
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-        - description: Mailbox ID from provisioning, or default. Every data and toxic operation stays within this scope.
-          in: path
-          name: mailbox
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              additionalProperties: false
-              properties:
-                To:
-                  items:
-                    type: string
-                  type: array
-              required:
-                - To
-              type: object
-        required: true
-      responses:
-        "200":
-          content:
-            text/plain:
-              schema:
-                type: string
-          description: Success
-        "400":
-          content:
-            text/plain:
-              schema:
-                type: string
-          description: Invalid request
-        "401":
-          content:
-            text/plain:
-              schema:
-                type: string
-          description: Configured authentication required
-        "404":
-          content:
-            text/plain:
-              schema:
-                type: string
-          description: Resource not found
-      summary: Release through the configured SMTP relay
   /mailboxes/{mailbox}/api/v1/message/{id}/sa-check:
     get:
       description: id is a database UUID or latest. Inspection endpoints other than detail do not mark read.
@@ -2948,7 +2840,7 @@ paths:
       summary: List or search messages newest first
   /mailboxes/{mailbox}/api/v1/send:
     post:
-      description: May deliver externally only if automatic relay/forwarding is configured. Errors use JSON Error; configured delivery failure returns 502 after capture.
+      description: Stores the message without delivering it anywhere. Errors use JSON Error.
       operationId: mailboxPostApiV1Send
       parameters:
         - description: Mailbox ID from provisioning, or default. Every data and toxic operation stays within this scope.
@@ -2993,8 +2885,6 @@ paths:
               schema:
                 type: string
           description: Resource not found
-        "502":
-          description: Configured external delivery failed after capture
       summary: Compose and capture a MIME message
   /mailboxes/{mailbox}/api/v1/tags:
     get:

@@ -33,7 +33,6 @@ prefix them with its `api_base`, e.g. `/mailboxes/{id}/api/v1/messages`.
 | `GET /api/v1/message/{id}/link-check` | Check links (`follow=true` to follow redirects) |
 | `GET /api/v1/message/{id}/html-check` | HTML/CSS email client compatibility |
 | `GET /api/v1/message/{id}/sa-check` | SpamAssassin report (if configured) |
-| `POST /api/v1/message/{id}/release` | Deliver through the configured relay |
 | `POST /api/v1/send` | Build and store a message from JSON |
 | `POST /api/v1/messages/raw?folder=…` | Import raw MIME |
 | `GET/PUT /api/v1/tags`, `PUT/DELETE /api/v1/tags/{tag}` | List, set, rename and remove tags |
@@ -70,5 +69,4 @@ identifiers. Don't mix them up.
 ## Errors
 
 400 validation, 401 authentication, 404 not found, 500 storage. Unknown JSON
-fields are rejected. `POST /api/v1/send` returns JSON `{"Error": …}` and uses
-502 when onward delivery fails after the message was stored.
+fields are rejected. `POST /api/v1/send` returns errors as JSON `{"Error": …}`.
