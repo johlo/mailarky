@@ -1,4 +1,4 @@
-package emulator
+package sandbox
 
 import (
 	"bytes"
@@ -620,7 +620,7 @@ func TestWebhooksWebsocketAndMetrics(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("webhook was not retried")
 	}
-	if got := apiCall(t, controlHandler(b), "GET", "/metrics", nil, 200).Body.String(); !strings.Contains(got, "mail_emulator_messages 1") {
+	if got := apiCall(t, controlHandler(b), "GET", "/metrics", nil, 200).Body.String(); !strings.Contains(got, "mail_sandbox_messages 1") {
 		t.Fatal(got)
 	}
 }
@@ -672,7 +672,7 @@ func TestConfigurationAndHTTPAuthentication(t *testing.T) {
 	t.Setenv("MP_SMTP_RELAY_MATCHING", "")
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	os.WriteFile(path, []byte("max_message_bytes: 1024\nmax_messages: 0\n"), 0600)
-	t.Setenv("MAIL_EMULATOR_CONFIG", path)
+	t.Setenv("MAIL_SANDBOX_CONFIG", path)
 	c, err := loadConfig(nil)
 	if err != nil || c.MaxSize != 1024 || c.MaxMessages != 0 {
 		t.Fatalf("config %+v %v", c, err)

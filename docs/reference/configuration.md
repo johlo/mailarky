@@ -1,6 +1,6 @@
 # Configuration reference
 
-Load defaults, then `MAIL_EMULATOR_CONFIG` YAML, then environment variables, then
+Load defaults, then `MAIL_SANDBOX_CONFIG` YAML, then environment variables, then
 command-line flags. Unknown YAML fields and CLI flags fail startup. Flags use
 Go syntax (`--flag=value` for booleans). The YAML keys below are the supported
 configuration contract; the MP-prefixed environment variables ease migration.
@@ -20,14 +20,14 @@ maximum raw message size. Webhook minimum interval is 1 second.
 | YAML key | CLI flag | Environment |
 | --- | --- | --- |
 | `smtp` | `--smtp` | `MP_SMTP_BIND_ADDR` |
-| `imap` | `--imap` | `IMAP_EMULATOR_BIND_ADDR` |
+| `imap` | `--imap` | `MAIL_SANDBOX_IMAP_BIND_ADDR` |
 | `http` | `--listen` | `MP_UI_BIND_ADDR` |
-| `cert` | `--imap-tls-cert` | `IMAP_EMULATOR_CERT` |
-| `key` | `--imap-tls-key` | `IMAP_EMULATOR_KEY` |
-| `imap_username` | `--imap-username` | `IMAP_EMULATOR_USERNAME` |
-| `imap_password` | `--imap-password` | `IMAP_EMULATOR_PASSWORD` |
-| `smtp_folder` | `--smtp-folder` | `SMTP_EMULATOR_FOLDER` |
-| `smtp_tls` | `--smtp-tls-mode` | `SMTP_EMULATOR_TLS_MODE` |
+| `cert` | `--imap-tls-cert` | `MAIL_SANDBOX_IMAP_CERT` |
+| `key` | `--imap-tls-key` | `MAIL_SANDBOX_IMAP_KEY` |
+| `imap_username` | `--imap-username` | `MAIL_SANDBOX_IMAP_USERNAME` |
+| `imap_password` | `--imap-password` | `MAIL_SANDBOX_IMAP_PASSWORD` |
+| `smtp_folder` | `--smtp-folder` | `MAIL_SANDBOX_SMTP_FOLDER` |
+| `smtp_tls` | `--smtp-tls-mode` | `MAIL_SANDBOX_SMTP_TLS_MODE` |
 | `smtp_cert` | `--smtp-tls-cert` | `MP_SMTP_TLS_CERT` |
 | `smtp_key` | `--smtp-tls-key` | `MP_SMTP_TLS_KEY` |
 | `require_tls` | `--smtp-require-starttls` | `MP_SMTP_REQUIRE_STARTTLS` |
@@ -70,10 +70,33 @@ maximum raw message size. Webhook minimum interval is 1 second.
 | `http_auth` | — | `MP_UI_AUTH` |
 | `send_auth` | — | `MP_SEND_API_AUTH` |
 
-`SMTP_EMULATOR_PORT`, `IMAP_EMULATOR_PORT`, and `IMAP_EMULATOR_HTTP_PORT` also
+`MAIL_SANDBOX_SMTP_PORT`, `MAIL_SANDBOX_IMAP_PORT`, and `MAIL_SANDBOX_HTTP_PORT` also
 set process listener ports; explicit bind-address variables/flags take precedence.
 In the supplied Compose file these variables override **host publication** only.
 Set service `environment` entries or mount a YAML config for container settings.
+
+### Previous environment names
+
+The earlier names remain aliases. Prefer the `MAIL_SANDBOX_*` names above;
+when both are supplied the new name wins. Explicit bind addresses still override
+port-only settings, and command-line flags override environment settings.
+
+| Previous name | Current name |
+| --- | --- |
+| `MAIL_EMULATOR_CONFIG` | `MAIL_SANDBOX_CONFIG` |
+| `SMTP_EMULATOR_PORT` | `MAIL_SANDBOX_SMTP_PORT` |
+| `IMAP_EMULATOR_PORT` | `MAIL_SANDBOX_IMAP_PORT` |
+| `IMAP_EMULATOR_HTTP_PORT` | `MAIL_SANDBOX_HTTP_PORT` |
+| `IMAP_EMULATOR_BIND_ADDR` | `MAIL_SANDBOX_IMAP_BIND_ADDR` |
+| `IMAP_EMULATOR_CERT` | `MAIL_SANDBOX_IMAP_CERT` |
+| `IMAP_EMULATOR_KEY` | `MAIL_SANDBOX_IMAP_KEY` |
+| `IMAP_EMULATOR_USERNAME` | `MAIL_SANDBOX_IMAP_USERNAME` |
+| `IMAP_EMULATOR_PASSWORD` | `MAIL_SANDBOX_IMAP_PASSWORD` |
+| `SMTP_EMULATOR_FOLDER` | `MAIL_SANDBOX_SMTP_FOLDER` |
+| `SMTP_EMULATOR_TLS_MODE` | `MAIL_SANDBOX_SMTP_TLS_MODE` |
+
+The smoke script also accepts `IMAP_EMULATOR_HTTP_URL` as an alias for
+`MAIL_SANDBOX_HTTP_URL`. Existing `MP_*` settings retain their names.
 
 `max_message_bytes` is bytes in YAML; `--max-message-size` and
 `MP_MAX_MESSAGE_SIZE` use MiB. `max_messages: 0` is unlimited. Duration flags/YAML
@@ -87,7 +110,7 @@ global failures. Use [message-scoped toxics](../how-to/toxics.md).
 
 IMAP always uses implicit TLS with the configured cert/key; the container bundles
 public test fixtures in `/certs`. `make run` uses `testdata/tls` instead.
-Certificates contain localhost, 127.0.0.1 and imap-emulator names.
+Certificates contain localhost, 127.0.0.1 and mail-sandbox names.
 
 For SMTP, supplying an SMTP cert/key enables optional STARTTLS. Require it with
 `--smtp-require-starttls` / MP_SMTP_REQUIRE_STARTTLS. For implicit TLS use

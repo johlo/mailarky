@@ -1,7 +1,7 @@
 # Shared storage and test isolation
 
-`cmd/imap-emulator` handles process signals and passes arguments to
-`internal/emulator.Run`. The internal package owns configuration, command
+`cmd/mail-sandbox` handles process signals and passes arguments to
+`internal/sandbox.Run`. The internal package owns configuration, command
 dispatch, listener lifecycles and mailbox behavior. Its tests live alongside the
 implementation; the repository root holds build configuration and API contracts.
 

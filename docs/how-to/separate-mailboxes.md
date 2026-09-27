@@ -93,5 +93,5 @@ ephemeral. Without persistence, runtime accounts disappear on restart.
 HTTP access uses the configured service/send API credentials. API scoping isolates
 test state; it is not separate HTTP authorization for mutually untrusted tenants.
 Message summaries/webhooks include MailboxID, and webhooks additionally send the
-Mail-Emulator-Mailbox header. Scoped WebSocket streams contain only that account's
+Mail-Sandbox-Mailbox header. Scoped WebSocket streams contain only that account's
 updates. Retention limits apply independently to each account.

@@ -1,5 +1,5 @@
-// Package emulator implements the shared SMTP, IMAP and HTTP test mail service.
-package emulator
+// Package sandbox implements the shared SMTP, IMAP and HTTP test mail service.
+package sandbox
 
 import (
 	"context"
@@ -87,7 +87,7 @@ func Run(ctx context.Context, args []string) error {
 		return sendmail(args[1:])
 	}
 	if len(args) > 0 && (args[0] == "--version" || args[0] == "version") {
-		log.Print("imap-emulator 2 (SMTP, IMAP, HTTP)")
+		log.Print("mail-sandbox 2 (SMTP, IMAP, HTTP)")
 		return nil
 	}
 	c, err := loadConfig(args)

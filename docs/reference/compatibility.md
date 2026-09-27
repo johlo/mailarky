@@ -44,7 +44,7 @@ byte-for-byte implementation or configuration compatibility.
 - IMAP is designed for polling. IDLE/unsolicited updates and implicit Seen on
   body FETCH are not implemented. Explicit STORE and HTTP read updates work.
 - Search validation returns 400 for unknown/malformed filters. Metrics use the
-  `mail_emulator_` prefix. Only documented settings are accepted.
+  `mail_sandbox_` prefix. Only documented settings are accepted.
 - Sendmail mode is a local unauthenticated SMTP submission client; use a normal
   SMTP client for authenticated submission.
 - Retention is per account. Disable it in a shared concurrent test suite, and

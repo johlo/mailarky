@@ -1,4 +1,4 @@
-package emulator
+package sandbox
 
 import (
 	"errors"
@@ -83,9 +83,18 @@ func defaultConfig() configuration {
 	return configuration{MailboxID: "default", SMTPAddress: ":1025", IMAPAddress: ":1993", HTTPAddress: ":8026", Cert: "/certs/server.crt", Key: "/certs/server.key", Username: mailboxUsername, Password: mailboxPassword, SMTPFolder: "Sent", MaxMessages: 500, MaxSize: maxMessageBytes, WebhookLimit: time.Second}
 }
 
+func firstNonemptyEnv(names ...string) string {
+	for _, name := range names {
+		if value := os.Getenv(name); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 func loadConfig(args []string) (configuration, error) {
 	c := defaultConfig()
-	if name := os.Getenv("MAIL_EMULATOR_CONFIG"); name != "" {
+	if name := firstNonemptyEnv("MAIL_SANDBOX_CONFIG", "MAIL_EMULATOR_CONFIG"); name != "" {
 		data, err := os.ReadFile(name)
 		if err != nil {
 			return c, err
@@ -96,7 +105,7 @@ func loadConfig(args []string) (configuration, error) {
 			return c, err
 		}
 	}
-	fs := flag.NewFlagSet("imap-emulator", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mail-sandbox", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	var errs []error
 	str := func(p *string, name string, envs ...string) {
@@ -143,22 +152,26 @@ func loadConfig(args []string) (configuration, error) {
 		fs.DurationVar(p, name, *p, name)
 	}
 	for _, pair := range []struct {
-		p   *string
-		env string
-	}{{&c.SMTPAddress, "SMTP_EMULATOR_PORT"}, {&c.IMAPAddress, "IMAP_EMULATOR_PORT"}, {&c.HTTPAddress, "IMAP_EMULATOR_HTTP_PORT"}} {
-		if v := os.Getenv(pair.env); v != "" {
+		p    *string
+		envs []string
+	}{
+		{&c.SMTPAddress, []string{"MAIL_SANDBOX_SMTP_PORT", "SMTP_EMULATOR_PORT"}},
+		{&c.IMAPAddress, []string{"MAIL_SANDBOX_IMAP_PORT", "IMAP_EMULATOR_PORT"}},
+		{&c.HTTPAddress, []string{"MAIL_SANDBOX_HTTP_PORT", "IMAP_EMULATOR_HTTP_PORT"}},
+	} {
+		if v := firstNonemptyEnv(pair.envs...); v != "" {
 			*pair.p = ":" + v
 		}
 	}
 	str(&c.SMTPAddress, "smtp", "MP_SMTP_BIND_ADDR")
-	str(&c.IMAPAddress, "imap", "IMAP_EMULATOR_BIND_ADDR")
+	str(&c.IMAPAddress, "imap", "MAIL_SANDBOX_IMAP_BIND_ADDR", "IMAP_EMULATOR_BIND_ADDR")
 	str(&c.HTTPAddress, "listen", "MP_UI_BIND_ADDR")
-	str(&c.Cert, "imap-tls-cert", "IMAP_EMULATOR_CERT")
-	str(&c.Key, "imap-tls-key", "IMAP_EMULATOR_KEY")
-	str(&c.Username, "imap-username", "IMAP_EMULATOR_USERNAME")
-	str(&c.Password, "imap-password", "IMAP_EMULATOR_PASSWORD")
-	str(&c.SMTPFolder, "smtp-folder", "SMTP_EMULATOR_FOLDER")
-	str(&c.SMTPTLS, "smtp-tls-mode", "SMTP_EMULATOR_TLS_MODE")
+	str(&c.Cert, "imap-tls-cert", "MAIL_SANDBOX_IMAP_CERT", "IMAP_EMULATOR_CERT")
+	str(&c.Key, "imap-tls-key", "MAIL_SANDBOX_IMAP_KEY", "IMAP_EMULATOR_KEY")
+	str(&c.Username, "imap-username", "MAIL_SANDBOX_IMAP_USERNAME", "IMAP_EMULATOR_USERNAME")
+	str(&c.Password, "imap-password", "MAIL_SANDBOX_IMAP_PASSWORD", "IMAP_EMULATOR_PASSWORD")
+	str(&c.SMTPFolder, "smtp-folder", "MAIL_SANDBOX_SMTP_FOLDER", "SMTP_EMULATOR_FOLDER")
+	str(&c.SMTPTLS, "smtp-tls-mode", "MAIL_SANDBOX_SMTP_TLS_MODE", "SMTP_EMULATOR_TLS_MODE")
 	str(&c.SMTPCert, "smtp-tls-cert", "MP_SMTP_TLS_CERT")
 	str(&c.SMTPKey, "smtp-tls-key", "MP_SMTP_TLS_KEY")
 	boolean(&c.RequireTLS, "smtp-require-starttls", "MP_SMTP_REQUIRE_STARTTLS")

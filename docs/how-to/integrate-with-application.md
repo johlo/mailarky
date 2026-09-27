@@ -1,12 +1,12 @@
 # Connect an application
 
 Run the service with `docker compose up -d --build --wait`. Applications on the
-Compose network use SMTP `imap-emulator:1025`, TLS IMAP `imap-emulator:1993`, and
-HTTP `http://imap-emulator:8026`. Host applications use `localhost` instead.
+Compose network use SMTP `mail-sandbox:1025`, TLS IMAP `mail-sandbox:1993`, and
+HTTP `http://mail-sandbox:8026`. Host applications use `localhost` instead.
 
 SMTP accepts unauthenticated test deliveries by default. Configure the sending
 application's SMTP host/port accordingly. Captured deliveries appear immediately
-in `Sent` and through `/api/v1/messages`. Use `SMTP_EMULATOR_FOLDER=INBOX` inside
+in `Sent` and through `/api/v1/messages`. Use `MAIL_SANDBOX_SMTP_FOLDER=INBOX` inside
 the server process if your application expects deliveries in INBOX.
 
 IMAP credentials default to `clinic@example.test` / `local-imap-only`. Install

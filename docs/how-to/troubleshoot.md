@@ -2,9 +2,9 @@
 
 | Symptom | Check |
 | --- | --- |
-| Port already in use | Set SMTP_EMULATOR_PORT, IMAP_EMULATOR_PORT and IMAP_EMULATOR_HTTP_PORT for Compose |
-| TLS verification fails | Trust testdata/tls/server.crt; connect as localhost, 127.0.0.1 or imap-emulator |
-| No SMTP delivery in INBOX | SMTP defaults to Sent; configure SMTP_EMULATOR_FOLDER if needed |
+| Port already in use | Set MAIL_SANDBOX_SMTP_PORT, MAIL_SANDBOX_IMAP_PORT and MAIL_SANDBOX_HTTP_PORT for Compose |
+| TLS verification fails | Trust testdata/tls/server.crt; connect as localhost, 127.0.0.1 or mail-sandbox |
+| No SMTP delivery in INBOX | SMTP defaults to Sent; configure MAIL_SANDBOX_SMTP_FOLDER if needed |
 | Root API does not show a provisioned account's mail | Prefix message paths with that account's returned api_base; root paths show only default |
 | SMTP delivery goes to default instead of a provisioned account | Match an assigned envelope recipient exactly, ignoring case; To headers and SMTP usernames do not select accounts |
 | SMTP RCPT returns 553 | Recipients belong to different accounts; use a separate transaction for each account |
@@ -23,7 +23,7 @@
 | Database will not open | Use a new bbolt file, a writable directory and one owning process |
 | Relay fails | Check explicit configuration, recipients, credentials, TLS trust and peer logs |
 
-Use `docker compose logs imap-emulator`, `/api/v1/info`, and `/api/v1/toxics` to
+Use `docker compose logs mail-sandbox`, `/api/v1/info`, and `/api/v1/toxics` to
 inspect state. Prefix inspection paths with `api_base` for a provisioned account;
 `/api/v1/mailboxes` lists accounts. `/healthz` checks HTTP responsiveness, not an application's sync
 completion. Wait for the consuming application's result in end-to-end tests.

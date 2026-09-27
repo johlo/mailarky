@@ -1,4 +1,4 @@
-package emulator
+package sandbox
 
 import (
 	"encoding/json"
@@ -114,7 +114,7 @@ func (a *httpAPI) handler() http.Handler {
 	mux.HandleFunc("GET /metrics", a.metrics)
 	mux.HandleFunc("GET /view/{file}", a.view)
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		jsonResponse(w, 200, map[string]any{"service": "mail-emulator", "protocols": []string{"smtp", "imap", "http"}, "api": "/api/v1/messages"})
+		jsonResponse(w, 200, map[string]any{"service": "mail-sandbox", "protocols": []string{"smtp", "imap", "http"}, "api": "/api/v1/messages"})
 	})
 	var handler http.Handler = mux
 	root := strings.Trim(a.webroot(), "/")
@@ -185,7 +185,7 @@ func (a *httpAPI) middleware(next http.Handler) http.Handler {
 			if len(users) > 0 || acceptAny {
 				user, password, ok := r.BasicAuth()
 				if !ok || (!acceptAny && !users.valid(user, password)) {
-					w.Header().Set("WWW-Authenticate", `Basic realm="mail-emulator"`)
+					w.Header().Set("WWW-Authenticate", `Basic realm="mail-sandbox"`)
 					apiError(w, 401, errors.New("authentication required"))
 					return
 				}

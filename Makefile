@@ -5,8 +5,8 @@ test:
 	go vet ./...
 
 run:
-	IMAP_EMULATOR_CERT=testdata/tls/server.crt \
-	IMAP_EMULATOR_KEY=testdata/tls/server.key go run ./cmd/imap-emulator
+	MAIL_SANDBOX_IMAP_CERT=testdata/tls/server.crt \
+	MAIL_SANDBOX_IMAP_KEY=testdata/tls/server.key go run ./cmd/mail-sandbox
 
 docker:
 	docker compose up -d --build

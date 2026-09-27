@@ -1,4 +1,4 @@
-module github.com/johlo/imap-emulator
+module github.com/johlo/mail-sandbox
 
 go 1.26.4
 

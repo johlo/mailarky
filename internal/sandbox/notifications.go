@@ -1,4 +1,4 @@
-package emulator
+package sandbox
 
 import (
 	"bytes"
@@ -106,7 +106,7 @@ func (b *mailboxBackend) startWorkers(ctx context.Context) func() {
 							break
 						}
 						req.Header.Set("Content-Type", "application/json")
-						req.Header.Set("Mail-Emulator-Mailbox", b.config.MailboxID)
+						req.Header.Set("Mail-Sandbox-Mailbox", b.config.MailboxID)
 						if b.config.Label != "" {
 							req.Header.Set("Mailpit-Label", b.config.Label)
 						}
@@ -168,7 +168,7 @@ func (a *httpAPI) info(w http.ResponseWriter, r *http.Request) {
 		database = a.store.config.Database
 		a.store.db.View(func(tx *bolt.Tx) error { size = tx.Size(); return nil })
 	}
-	jsonResponse(w, 200, map[string]any{"MailboxID": a.store.config.MailboxID, "Version": "mail-emulator/2", "LatestVersion": "", "Database": database, "DatabaseSize": size, "Messages": len(list), "Unread": unread, "Tags": tags, "RuntimeStats": map[string]any{"Memory": mem.Alloc, "SMTPAccepted": a.store.accepted.Load(), "SMTPAcceptedSize": a.store.acceptedSize.Load(), "SMTPRejected": a.store.rejected.Load(), "SMTPIgnored": a.store.ignored.Load(), "MessagesDeleted": a.store.deleted.Load(), "Uptime": int64(time.Since(a.store.started).Seconds())}})
+	jsonResponse(w, 200, map[string]any{"MailboxID": a.store.config.MailboxID, "Version": "mail-sandbox/2", "LatestVersion": "", "Database": database, "DatabaseSize": size, "Messages": len(list), "Unread": unread, "Tags": tags, "RuntimeStats": map[string]any{"Memory": mem.Alloc, "SMTPAccepted": a.store.accepted.Load(), "SMTPAcceptedSize": a.store.acceptedSize.Load(), "SMTPRejected": a.store.rejected.Load(), "SMTPIgnored": a.store.ignored.Load(), "MessagesDeleted": a.store.deleted.Load(), "Uptime": int64(time.Since(a.store.started).Seconds())}})
 }
 func (a *httpAPI) capabilities(w http.ResponseWriter, r *http.Request) {
 	c := a.store.config
@@ -182,6 +182,6 @@ func (a *httpAPI) metrics(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 	values := map[string]uint64{"messages": uint64(len(a.store.snapshot())), "smtp_accepted_total": a.store.accepted.Load(), "smtp_rejected_total": a.store.rejected.Load(), "smtp_accepted_bytes_total": a.store.acceptedSize.Load(), "messages_deleted_total": a.store.deleted.Load(), "messages_ignored_total": a.store.ignored.Load()}
 	for name, value := range values {
-		fmt.Fprintf(w, "mail_emulator_%s %d\n", name, value)
+		fmt.Fprintf(w, "mail_sandbox_%s %d\n", name, value)
 	}
 }

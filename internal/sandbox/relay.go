@@ -1,4 +1,4 @@
-package emulator
+package sandbox
 
 import (
 	"bytes"
@@ -167,7 +167,7 @@ func relayMessage(ctx context.Context, c relayConfig, m *storedMessage, recipien
 		}
 	}
 	if manual && !c.PreserveMessageIDs {
-		replace["Message-ID"] = "<" + uuid.NewString() + "@mail-emulator.test>"
+		replace["Message-ID"] = "<" + uuid.NewString() + "@mail-sandbox.test>"
 	}
 	if len(replace) > 0 {
 		raw = replaceHeaders(raw, replace)

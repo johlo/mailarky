@@ -1,8 +1,8 @@
 services:
-  imap-emulator:
-    image: imap-emulator:local
+  mail-sandbox:
+    image: mail-sandbox:local
     build: .
     ports:
-      - "127.0.0.1:${SMTP_EMULATOR_PORT:-1025}:1025"
-      - "127.0.0.1:${IMAP_EMULATOR_PORT:-1993}:1993"
-      - "127.0.0.1:${IMAP_EMULATOR_HTTP_PORT:-8026}:8026"
+      - "127.0.0.1:${MAIL_SANDBOX_SMTP_PORT:-${SMTP_EMULATOR_PORT:-1025}}:1025"
+      - "127.0.0.1:${MAIL_SANDBOX_IMAP_PORT:-${IMAP_EMULATOR_PORT:-1993}}:1993"
+      - "127.0.0.1:${MAIL_SANDBOX_HTTP_PORT:-${IMAP_EMULATOR_HTTP_PORT:-8026}}:8026"

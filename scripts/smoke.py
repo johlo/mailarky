@@ -11,9 +11,9 @@ import urllib.request
 import uuid
 from email.message import EmailMessage
 
-api = os.environ.get('IMAP_EMULATOR_HTTP_URL', 'http://localhost:8026')
-smtp_port = int(os.environ.get('SMTP_EMULATOR_PORT', '1025'))
-imap_port = int(os.environ.get('IMAP_EMULATOR_PORT', '1993'))
+api = os.environ.get('MAIL_SANDBOX_HTTP_URL', os.environ.get('IMAP_EMULATOR_HTTP_URL', 'http://localhost:8026'))
+smtp_port = int(os.environ.get('MAIL_SANDBOX_SMTP_PORT', os.environ.get('SMTP_EMULATOR_PORT', '1025')))
+imap_port = int(os.environ.get('MAIL_SANDBOX_IMAP_PORT', os.environ.get('IMAP_EMULATOR_PORT', '1993')))
 token = str(uuid.uuid4())
 name = 'smoke-' + token
 ids = []

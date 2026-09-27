@@ -1,4 +1,4 @@
-package emulator
+package sandbox
 
 import (
 	"bufio"
@@ -268,7 +268,7 @@ func newSMTPServer(b *mailboxBackend, deliver func(context.Context, *storedMessa
 	}
 	srv := smtp.NewServer(back)
 	srv.Addr = b.config.SMTPAddress
-	srv.Domain = "mail-emulator.test"
+	srv.Domain = "mail-sandbox.test"
 	srv.MaxMessageBytes = b.config.MaxSize
 	srv.MaxRecipients = 1000
 	srv.ReadTimeout = time.Minute

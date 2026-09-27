@@ -4,19 +4,27 @@
 
 ```sh
 docker compose up -d --build --wait
-SMTP_EMULATOR_PORT=11025 IMAP_EMULATOR_PORT=11993 IMAP_EMULATOR_HTTP_PORT=18026   docker compose -p another-mailbox up -d --build --wait
+MAIL_SANDBOX_SMTP_PORT=11025 MAIL_SANDBOX_IMAP_PORT=11993 MAIL_SANDBOX_HTTP_PORT=18026   docker compose -p another-mailbox up -d --build --wait
 ```
 
 Host port overrides do not change container listeners. Use the same project name
 and overrides when running subsequent Compose commands. `docker compose down`
 stops the default stack. In-memory messages and all toxics disappear on restart.
 
+When upgrading from `imap-emulator`, stop the old Compose stack before starting
+the renamed `mail-sandbox` service. Update application hostnames and trust the
+new `testdata/tls/server.crt`, which covers the `mail-sandbox` Docker hostname.
+The executable is now `mail-sandbox`; metrics use `mail_sandbox_` and the webhook
+mailbox header is `Mail-Sandbox-Mailbox`. Message APIs and stored databases keep
+their formats. Existing environment names remain
+[compatibility aliases](../reference/configuration.md#previous-environment-names).
+
 ## Local Go development
 
 Install the Go version in `go.mod`, then run `make run`. It points IMAP TLS at
 the bundled fixture certificate. `make test` runs race-checked tests and vet.
-The executable is in `cmd/imap-emulator`; implementation and package tests live
-in `internal/emulator`. Run `go test ./...` from the repository root to include
+The executable is in `cmd/mail-sandbox`; implementation and package tests live
+in `internal/sandbox`. Run `go test ./...` from the repository root to include
 all packages. Shared TLS fixtures remain in `testdata/tls`.
 All protocol tests use ephemeral local ports and synthetic messages, including
 SMTP authentication/TLS, relay, persistence, diagnostics and concurrent toxics.
@@ -29,7 +37,7 @@ Create a host directory writable by container UID 65532. Save this alongside
 
 ```yaml
 services:
-  imap-emulator:
+  mail-sandbox:
     environment:
       MP_DATABASE: /data/mail.db
       MP_MAX_MESSAGES: "0"
@@ -60,18 +68,18 @@ python3 scripts/smoke.py
 docker compose down
 ```
 
-Inspect logs with `docker compose logs imap-emulator`. The image runs as UID/GID
+Inspect logs with `docker compose logs mail-sandbox`. The image runs as UID/GID
 65532 and includes public TLS fixtures and the CA trust bundle for optional
 outbound HTTPS/SMTP. Health probes are `/healthz`, `/livez`, and `/readyz`.
 
 ## Sendmail-compatible submission
 
-Build the local binary with `go build -o imap-emulator ./cmd/imap-emulator`,
+Build the local binary with `go build -o mail-sandbox ./cmd/mail-sandbox`,
 then submit MIME:
 
 ```sh
-./imap-emulator sendmail -S localhost:1025 -t < fixture.eml
-./imap-emulator sendmail -S localhost:1025 -f sender@example.test recipient@example.test < fixture.eml
+./mail-sandbox sendmail -S localhost:1025 -t < fixture.eml
+./mail-sandbox sendmail -S localhost:1025 -f sender@example.test recipient@example.test < fixture.eml
 ```
 
 `-t` extracts To/Cc/Bcc recipients; the Bcc header is removed for delivery.

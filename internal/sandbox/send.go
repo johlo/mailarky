@@ -1,4 +1,4 @@
-package emulator
+package sandbox
 
 import (
 	"bytes"
@@ -49,7 +49,7 @@ func (req sendRequest) mimeMessage() (raw []byte, from string, recipients []stri
 		return nil, "", nil, errors.New("valid From.Email is required")
 	}
 	from = req.From.Email
-	fields := map[string]string{"Date": time.Now().UTC().Format(time.RFC1123Z), "From": (&mail.Address{Name: req.From.Name, Address: req.From.Email}).String(), "Subject": mime.QEncoding.Encode("UTF-8", req.Subject), "Message-Id": "<" + uuid.NewString() + "@mail-emulator.test>", "Mime-Version": "1.0"}
+	fields := map[string]string{"Date": time.Now().UTC().Format(time.RFC1123Z), "From": (&mail.Address{Name: req.From.Name, Address: req.From.Email}).String(), "Subject": mime.QEncoding.Encode("UTF-8", req.Subject), "Message-Id": "<" + uuid.NewString() + "@mail-sandbox.test>", "Mime-Version": "1.0"}
 	for name, list := range map[string][]sendAddress{"To": req.To, "Cc": req.Cc, "Reply-To": req.ReplyTo} {
 		var values []string
 		for _, a := range list {
