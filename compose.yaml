@@ -1,0 +1,7 @@
+services:
+  imap-emulator:
+    image: imap-emulator:local
+    build: .
+    ports:
+      - "127.0.0.1:${IMAP_EMULATOR_PORT:-1993}:1993"
+      - "127.0.0.1:${IMAP_EMULATOR_HTTP_PORT:-8026}:8026"
