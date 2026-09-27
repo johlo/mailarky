@@ -35,7 +35,9 @@ same store, so no copy/mirroring process is required. Raw SMTP/APPEND MIME remai
 unchanged in storage. Bcc recipients available only in an SMTP envelope are
 included in HTTP metadata; they are not injected into the raw MIME or IMAP envelope.
 
-Date comes from the message header. INTERNALDATE is append/receipt time unless a
-fixture supplies `internal_date`. HTTP Created is always ingestion time.
+Date comes from the message header. SMTP and raw HTTP imports use receipt time
+for INTERNALDATE; IMAP APPEND can supply its own timestamp. For `/messages`
+fixtures, INTERNALDATE defaults to `date` (now if omitted), with `internal_date`
+as an explicit override. HTTP Created is always ingestion time.
 Toxics operate on selected message snapshots, outside storage locks; see
 [the isolation rules](../how-to/toxics.md).

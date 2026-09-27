@@ -5,8 +5,13 @@
 | Port already in use | Set SMTP_EMULATOR_PORT, IMAP_EMULATOR_PORT and IMAP_EMULATOR_HTTP_PORT for Compose |
 | TLS verification fails | Trust testdata/tls/server.crt; connect as localhost, 127.0.0.1 or imap-emulator |
 | No SMTP delivery in INBOX | SMTP defaults to Sent; configure SMTP_EMULATOR_FOLDER if needed |
+| Root API does not show a provisioned account's mail | Prefix message paths with that account's returned api_base; root paths show only default |
+| SMTP delivery goes to default instead of a provisioned account | Match an assigned envelope recipient exactly, ignoring case; To headers and SMTP usernames do not select accounts |
+| SMTP RCPT returns 553 | Recipients belong to different accounts; use a separate transaction for each account |
+| SMTP RCPT returns 550 after account deletion | Deleted recipient bindings remain unavailable until explicitly reassigned to a new account |
 | Mail disappears | In-memory restart, count retention (500 default), age retention, or explicit deletion |
 | App cannot authenticate | Match configured IMAP credentials or SMTP/HTTP auth file; SMTP auth normally requires TLS |
+| Generated account credentials fail over HTTP or SMTP | They are IMAP credentials; HTTP and SMTP use service-wide authentication settings |
 | Toxic rejected with 400 | Supply an exact nonempty selector; pre-DATA stages only know envelope addresses |
 | Toxic affects another test | Check for reused test tokens, shared recipient selectors or combined protocol commands |
 | Toxic did not fire | Check enabled, hits/max_hits, probability, folder and exact selector values |
@@ -19,5 +24,6 @@
 | Relay fails | Check explicit configuration, recipients, credentials, TLS trust and peer logs |
 
 Use `docker compose logs imap-emulator`, `/api/v1/info`, and `/api/v1/toxics` to
-inspect state. `/healthz` checks HTTP responsiveness, not an application's sync
+inspect state. Prefix inspection paths with `api_base` for a provisioned account;
+`/api/v1/mailboxes` lists accounts. `/healthz` checks HTTP responsiveness, not an application's sync
 completion. Wait for the consuming application's result in end-to-end tests.

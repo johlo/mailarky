@@ -67,4 +67,5 @@ curl -fsS http://localhost:8026/messages -H 'Content-Type: application/json'   -
 
 This appears in `INBOX`. HTTP `Created` records ingestion now; the Date header
 is historical. Stop with `docker compose down`; default in-memory mail is lost.
-Next, try [a failure scoped to one test](../how-to/toxics.md).
+Next, [give each test its own mailbox](../how-to/separate-mailboxes.md) or try
+[a failure scoped to one test](../how-to/toxics.md).

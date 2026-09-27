@@ -20,7 +20,9 @@ SMTP authentication/TLS, relay, persistence, diagnostics and concurrent toxics.
 
 ## Persist mail
 
-Create a host directory writable by container UID 65532. Add a Compose override:
+Create a host directory writable by container UID 65532. Save this alongside
+`compose.yaml` as `compose.override.yaml`, then recreate with
+`docker compose up -d --wait`:
 
 ```yaml
 services:
@@ -60,6 +62,8 @@ Inspect logs with `docker compose logs imap-emulator`. The image runs as UID/GID
 outbound HTTPS/SMTP. Health probes are `/healthz`, `/livez`, and `/readyz`.
 
 ## Sendmail-compatible submission
+
+Build the local binary with `go build -o imap-emulator .`, then submit MIME:
 
 ```sh
 ./imap-emulator sendmail -S localhost:1025 -t < fixture.eml

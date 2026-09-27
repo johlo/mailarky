@@ -26,7 +26,8 @@ immutable for an account. Delete and recreate it to change them.
 ## Send and inspect mail
 
 Send SMTP to the same server on port 1025, with an envelope recipient from the
-account's `recipients` list. It is stored in that account's Sent folder.
+account's `recipients` list. It is stored in that account's configured SMTP
+folder (`Sent` by default).
 Unassigned addresses continue going to the existing `default` account. SMTP
 routing uses the envelope, not the To header or the SMTP authentication username.
 SMTP authentication remains a server-wide setting; the generated account

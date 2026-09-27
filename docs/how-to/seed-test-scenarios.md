@@ -6,7 +6,10 @@ These recipes assume a running emulator and curl. Set the fixture URL once:
 export IMAP_FIXTURE_URL=http://localhost:8026
 ```
 
-Adjust the port for your environment. Each successful POST returns HTTP 201
+Adjust the port for your environment. For a provisioned account, append its
+returned `api_base`, for example
+`export IMAP_FIXTURE_URL=http://localhost:8026/mailboxes/GENERATED-UUID`.
+Each successful fixture POST returns HTTP 201
 with `folder` and `message_id`. The [HTTP reference](../reference/http-api.md)
 describes every field.
 
@@ -52,8 +55,11 @@ done
 ```
 
 Run your importer against both folders and check its deduplication behavior.
-The emulator retains both copies. Repeating a POST also appends another copy;
-it is not an upsert, even when the Message-ID already exists.
+With the default `MP_IGNORE_DUPLICATE_IDS=false`, the emulator retains both
+copies. Repeating a POST also appends another copy; it is not an upsert, even
+when the Message-ID already exists. Leave duplicate suppression disabled when
+testing your application's deduplication. When enabled, the emulator suppresses
+repeated Message-IDs across folders within the same account.
 
 ## Isolate tests that share a server
 
@@ -64,13 +70,13 @@ sync, and use bounded polling to wait for results.
 
 Avoid asserting global mailbox counts in parallel tests. Concurrent tests in the default account can append additional messages.
 [Provision an account per test](separate-mailboxes.md) for independent state.
-Use a separate Compose project and distinct host ports when a test needs a
-completely isolated mailbox.
+Use a separate Compose project and distinct host ports when a test needs
+different service-wide settings, such as TLS or outbound relay configuration.
 
 ## Import custom MIME
 
 ```sh
-curl -fsS 'http://localhost:8026/api/v1/messages/raw?folder=INBOX' \
+curl -fsS "${IMAP_FIXTURE_URL}/api/v1/messages/raw?folder=INBOX" \
   -H 'Content-Type: message/rfc822' --data-binary @fixture.eml
 ```
 
@@ -83,7 +89,7 @@ with base64 attachments. Fixture /messages remains convenient for historical mai
 Find IDs using your unique Message-ID or address, then delete only those IDs:
 
 ```sh
-curl -fsS -X DELETE http://localhost:8026/api/v1/messages \
+curl -fsS -X DELETE "${IMAP_FIXTURE_URL}/api/v1/messages" \
   -H 'Content-Type: application/json' -d '{"IDs":["YOUR-MESSAGE-UUID"]}'
 ```
 
