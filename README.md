@@ -38,6 +38,16 @@ HTML compatibility and link checks, Prometheus metrics, and optional SMTP/HTTP
 authentication and TLS. See [capabilities](docs/reference/capabilities.md)
 for the full list.
 
+## Architecture
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/architecture/context-dark.svg">
+  <img alt="System context: the test suite and the application under test use Mail Sandbox; optional SMTP server, webhook receiver and SpamAssassin" src="docs/architecture/context.svg">
+</picture>
+
+The [architecture page](docs/explanation/architecture.md) zooms in on the
+containers and components, following the C4 model.
+
 ## Quick start
 
 ```sh
@@ -96,7 +106,7 @@ between untrusted tenants.
 | Run locally, persist mail, use in CI | [Run and test](docs/how-to/run-and-test.md) |
 | Look up the contract | [HTTP API](docs/reference/http-api.md), [OpenAPI](openapi.yaml), [configuration](docs/reference/configuration.md), [IMAP behavior](docs/reference/imap-behavior.md) |
 | See every capability | [Capabilities](docs/reference/capabilities.md) |
-| Understand storage and isolation | [Design](docs/explanation/design.md) |
+| See how it is built | [Architecture](docs/explanation/architecture.md), [design](docs/explanation/design.md) |
 | Diagnose a problem | [Troubleshooting](docs/how-to/troubleshoot.md) |
 
 ## Development

@@ -18,4 +18,5 @@ over SMTP, then read it through HTTP and IMAP.
 | [IMAP behavior](reference/imap-behavior.md) | Supported commands, UIDs, dates |
 | [Configuration](reference/configuration.md) | Every setting |
 | [Capabilities](reference/capabilities.md) | Full feature list and limits |
+| [Architecture](explanation/architecture.md) | C4 diagrams: context, containers, components |
 | [Design](explanation/design.md) | How storage, protocols and isolation fit together |

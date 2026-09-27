@@ -1,0 +1,33 @@
+// C4 level 2: containers. Render with `make diagrams`.
+
+style person    fill: theme-secondary-subtle  border: theme-secondary
+style container fill: theme-primary-subtle  border: theme-primary
+style store     fill: theme-primary-subtle  border: theme-primary  badge: database
+style external  fill: theme-fill  border: theme-border
+style boundary  fill: none  border: theme-primary
+style tag       text: (color: theme-muted)
+style invisible fill: none  border: none
+style call      text: (color: theme-muted, size: small)
+
+node sb "Mail Sandbox [tag]\[Software system][/tag]"  style: boundary
+node sb.service "Mail Sandbox service / [tag]\[Container: Go, Docker image][/tag] / Accepts SMTP on 1025, serves TLS IMAP on 1993 and the HTTP API on 8026. Holds each account's mail in memory" (wrap: 34)  style: container
+node sb.db "Message database / [tag]\[Container: bbolt files][/tag] / Optional. Persists accounts, messages, flags and UIDs across restarts" (wrap: 30)  below sb.service (gap: wide)  style: store
+node sb.sendmail "sendmail client / [tag]\[Container: same binary][/tag] / Submits .eml files to the SMTP listener" (wrap: 26)  left of sb.db (gap: wide)  level with sb.db  style: container
+
+node app "Application under test / [tag]\[External system][/tag] / Sends email and imports a mailbox" (wrap: 26)  left of sb (gap: wide)  top level with sb.service  style: external
+node tests "Test suite / [tag]\[Person or CI job][/tag] / Drives the application and asserts on its mail" (wrap: 26)  above app and sb (gap: wide)  style: person
+
+node optional ""  right of sb (gap: wide)  level with sb.service  style: invisible  contents: (widths: match)
+node optional.relay "SMTP server / [tag]\[External system][/tag] / Optional. Receives relayed and forwarded mail" (wrap: 26)  style: external
+node optional.hooks "Webhook receiver / [tag]\[External system][/tag] / Optional. Notified of new messages" (wrap: 26)  style: external
+node optional.spamd "SpamAssassin / [tag]\[External system][/tag] / Optional. Scores messages for spam checks" (wrap: 26)  style: external
+
+edge tests -> app  "Triggers actions"  from: bottom  to: top  style: call
+edge tests -> sb.service  "Seeds mail, inspects it, injects faults / \[HTTP]"  from: bottom  to: top  style: call
+edge app -> sb.service  "Sends mail / \[SMTP]"  from: right  to: left  style: call
+edge sb.service -> app  "Reads the mailbox / \[IMAP over TLS]"  from: left  to: right  style: call
+edge sb.sendmail -> sb.service  "Submits mail / \[SMTP]"  from: top  to: left  style: call
+edge sb.service -> sb.db  "Reads and writes / \[bbolt]"  from: bottom  to: top  style: call
+edge sb.service -> optional.relay  "Relays mail \[SMTP]"  from: right  to: left  style: call
+edge sb.service -> optional.hooks  "Posts webhooks \[HTTP]"  from: right  to: left  style: call
+edge sb.service -> optional.spamd  "Checks spam \[spamd]"  from: right  to: left  style: call
