@@ -11,7 +11,7 @@ style call      text: (color: theme-muted, size: small)
 
 node svc "Mail Sandbox service [tag]\[Container: Go][/tag]"  style: boundary
 
-node svc.imap "IMAP server / [tag]\[Component: go-imap][/tag] / TLS IMAP4rev1 for the application's mail client" (wrap: 26)  style: component
+node svc.imap "IMAP server / [tag]\[Component: go-imap][/tag] / Serves folders over TLS IMAP4rev1 and applies IMAP toxics" (wrap: 26)  style: component
 node svc.smtp "SMTP server / [tag]\[Component: go-smtp][/tag] / Captures deliveries and applies SMTP toxics" (wrap: 26)  left of svc.imap  style: component
 node svc.http "HTTP API / [tag]\[Component: net/http][/tag] / Fixtures, search, inspection, toxics and account management" (wrap: 26)  right of svc.imap  style: component
 
