@@ -1,4 +1,4 @@
-package main
+package emulator
 
 import (
 	"bytes"
@@ -56,7 +56,7 @@ func smtpAddress(t *testing.T, b *mailboxBackend, managers ...*mailboxManager) s
 }
 func imapAddress(t *testing.T, b backend.Backend) string {
 	t.Helper()
-	cert, err := tls.LoadX509KeyPair("testdata/tls/server.crt", "testdata/tls/server.key")
+	cert, err := tls.LoadX509KeyPair("../../testdata/tls/server.crt", "../../testdata/tls/server.key")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func imapAddress(t *testing.T, b backend.Backend) string {
 }
 func imapClient(t *testing.T, address string, credentials ...string) *client.Client {
 	t.Helper()
-	pem, err := os.ReadFile("testdata/tls/server.crt")
+	pem, err := os.ReadFile("../../testdata/tls/server.crt")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -478,8 +478,8 @@ func TestSMTPAuthenticationAndSTARTTLS(t *testing.T) {
 	os.WriteFile(c.SMTPAuthFile, []byte("tester:secret\n"), 0600)
 	c.SMTPTLS = "starttls"
 	c.RequireTLS = true
-	c.Cert = "testdata/tls/server.crt"
-	c.Key = "testdata/tls/server.key"
+	c.Cert = "../../testdata/tls/server.crt"
+	c.Key = "../../testdata/tls/server.key"
 	b := testStore(t, c)
 	addr := smtpAddress(t, b)
 	conn, err := smtp.Dial(addr)

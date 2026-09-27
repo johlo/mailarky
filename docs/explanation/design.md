@@ -1,5 +1,10 @@
 # Shared storage and test isolation
 
+`cmd/imap-emulator` handles process signals and passes arguments to
+`internal/emulator.Run`. The internal package owns configuration, command
+dispatch, listener lifecycles and mailbox behavior. Its tests live alongside the
+implementation; the repository root holds build configuration and API contracts.
+
 Each account has a store shared by SMTP, IMAP and HTTP. A manager owns only the
 account catalog and exact SMTP recipient bindings. Each account has independent
 folders, credentials, persistence, retention, notifications and toxics. SMTP DATA parses the MIME,

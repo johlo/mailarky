@@ -1,4 +1,4 @@
-package main
+package emulator
 
 import (
 	"crypto/tls"
@@ -25,11 +25,11 @@ func testMailbox(t *testing.T) (*mailboxBackend, *client.Client, http.Handler) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { b.Close() })
-	cert, err := tls.LoadX509KeyPair("testdata/tls/server.crt", "testdata/tls/server.key")
+	cert, err := tls.LoadX509KeyPair("../../testdata/tls/server.crt", "../../testdata/tls/server.key")
 	if err != nil {
 		t.Fatal(err)
 	}
-	pem, err := os.ReadFile("testdata/tls/server.crt")
+	pem, err := os.ReadFile("../../testdata/tls/server.crt")
 	if err != nil {
 		t.Fatal(err)
 	}

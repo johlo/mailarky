@@ -1,4 +1,4 @@
-package main
+package emulator
 
 import (
 	"os"
@@ -36,7 +36,7 @@ func TestOpenAPITracksRegisteredHTTPRoutes(t *testing.T) {
 	var spec struct {
 		Paths map[string]map[string]any `yaml:"paths"`
 	}
-	data, err := os.ReadFile("openapi.yaml")
+	data, err := os.ReadFile("../../openapi.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

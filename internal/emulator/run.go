@@ -1,5 +1,5 @@
-// imap-emulator is a headless SMTP and IMAP test mail server.
-package main
+// Package emulator implements the shared SMTP, IMAP and HTTP test mail service.
+package emulator
 
 import (
 	"context"
@@ -8,9 +8,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 	_ "time/tzdata"
 
@@ -83,24 +80,19 @@ func run(ctx context.Context, c configuration) error {
 	}
 }
 
-func main() {
-	if len(os.Args) > 1 && os.Args[1] == "sendmail" {
-		if err := sendmail(os.Args[2:]); err != nil {
-			log.Fatal(err)
-		}
-		return
+// Run handles command arguments and serves until ctx is canceled or a listener
+// fails. The sendmail and version commands return without starting the service.
+func Run(ctx context.Context, args []string) error {
+	if len(args) > 0 && args[0] == "sendmail" {
+		return sendmail(args[1:])
 	}
-	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "version") {
+	if len(args) > 0 && (args[0] == "--version" || args[0] == "version") {
 		log.Print("imap-emulator 2 (SMTP, IMAP, HTTP)")
-		return
+		return nil
 	}
-	c, err := loadConfig(os.Args[1:])
+	c, err := loadConfig(args)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	if err := run(ctx, c); err != nil {
-		log.Fatal(err)
-	}
+	return run(ctx, c)
 }

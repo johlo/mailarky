@@ -15,6 +15,9 @@ stops the default stack. In-memory messages and all toxics disappear on restart.
 
 Install the Go version in `go.mod`, then run `make run`. It points IMAP TLS at
 the bundled fixture certificate. `make test` runs race-checked tests and vet.
+The executable is in `cmd/imap-emulator`; implementation and package tests live
+in `internal/emulator`. Run `go test ./...` from the repository root to include
+all packages. Shared TLS fixtures remain in `testdata/tls`.
 All protocol tests use ephemeral local ports and synthetic messages, including
 SMTP authentication/TLS, relay, persistence, diagnostics and concurrent toxics.
 
@@ -63,7 +66,8 @@ outbound HTTPS/SMTP. Health probes are `/healthz`, `/livez`, and `/readyz`.
 
 ## Sendmail-compatible submission
 
-Build the local binary with `go build -o imap-emulator .`, then submit MIME:
+Build the local binary with `go build -o imap-emulator ./cmd/imap-emulator`,
+then submit MIME:
 
 ```sh
 ./imap-emulator sendmail -S localhost:1025 -t < fixture.eml

@@ -48,4 +48,18 @@ an existing Mailpit deployment.
 
 Run `make test` for protocol/API tests with the Go race detector and `go vet`.
 The HTML compatibility checker uses [Can I Email](https://www.caniemail.com/)
-data under its [MIT license](data/LICENSE.caniemail).
+data under its [MIT license](internal/emulator/data/LICENSE.caniemail).
+
+Source layout:
+
+| Path | Purpose |
+| --- | --- |
+| `cmd/imap-emulator/` | Executable entry point and process signal handling |
+| `internal/emulator/` | Configuration, mailbox storage, protocols, HTTP API, toxics and their tests |
+| `internal/emulator/data/` | Embedded HTML compatibility data and its license |
+| `testdata/tls/` | Shared TLS fixtures for Go tests, Docker and client examples |
+| `scripts/` | Container smoke tests |
+| `docs/` | Diátaxis documentation |
+
+Build with `go build -o imap-emulator ./cmd/imap-emulator`, or start locally with
+`make run`.
