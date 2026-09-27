@@ -15,3 +15,6 @@ openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 3650 \
   -addext 'basicConstraints=critical,CA:TRUE' \
   -addext 'extendedKeyUsage=serverAuth'
 ```
+
+For custom certificates and client trust, see the
+[TLS configuration guide](../../docs/how-to/run-and-test.md#use-a-custom-certificate).

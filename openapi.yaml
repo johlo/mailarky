@@ -9,7 +9,7 @@ info:
     SMTP capture is handled separately; messages are not mirrored automatically.
 servers:
   - url: http://localhost:8026
-    description: Default local fixture port; the E2E runner allocates a free port.
+    description: Default local fixture port; Compose host-port overrides may change it.
 security: []
 paths:
   /healthz:
@@ -67,17 +67,17 @@ paths:
                   type: string
                   description: A UUID-based Message-ID is generated when omitted or empty.
                 date:
-                  type: string
+                  type: [string, 'null']
                   format: date-time
-                  description: Original message date; defaults to now. Written to the Date header at second precision.
+                  description: Original message date; defaults to now when omitted or null. Written to the Date header at second precision.
                 internal_date:
-                  type: string
+                  type: [string, 'null']
                   format: date-time
-                  description: IMAP received date; defaults to date.
+                  description: IMAP received date; defaults to date when omitted or null.
                 body:
                   type: string
                   default: ''
-                  description: Kept only in the emulator; the application's importer fetches metadata only.
+                  description: UTF-8 plain-text message body stored in the emulator and retrievable through IMAP.
                 flags:
                   type: array
                   items:

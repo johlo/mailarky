@@ -1,99 +1,56 @@
 # IMAP emulator
 
 A local TLS IMAP server for integration and end-to-end tests. Seed synthetic
-emails through a small HTTP API, then let your application fetch them using
-its normal IMAP client. Built with `github.com/emersion/go-imap` and an
-in-memory mailbox backend; no database or SMTP server is required.
+emails through an HTTP API, then fetch them with your application's normal
+IMAP client. Messages live in memory; no database or SMTP server is required.
 
-## Run with Docker
+## Documentation
+
+Start with the [documentation index](docs/README.md), organized using
+[Diátaxis](https://diataxis.fr/):
+
+| Your goal | Read |
+| --- | --- |
+| Learn by running a complete example | [Your first test mailbox](docs/tutorials/first-mailbox.md) |
+| Connect an application | [Integrate with your application](docs/how-to/integrate-with-application.md) |
+| Create historical mail, sent mail, or duplicates | [Seed test scenarios](docs/how-to/seed-test-scenarios.md) |
+| Run locally or in CI | [Run and test the emulator](docs/how-to/run-and-test.md) |
+| Resolve a connection or fixture error | [Troubleshoot](docs/how-to/troubleshoot.md) |
+| Look up settings and behavior | [Configuration](docs/reference/configuration.md), [HTTP API](docs/reference/http-api.md), [IMAP behavior](docs/reference/imap-behavior.md) |
+| Understand the design | [How the emulator works](docs/explanation/design.md) |
+
+## Quick start
+
+Requires access to this repository, Git, Docker with Compose, and curl.
 
 ```sh
 git clone https://github.com/johlo/imap-emulator.git
 cd imap-emulator
-docker compose up -d --build
+docker compose up -d --build --wait --wait-timeout 60
+curl -fsS http://localhost:8026/healthz
 ```
 
-| Setting | Default |
-| --- | --- |
-| TLS IMAP | `localhost:1993` |
-| HTTP fixture API | `http://localhost:8026` |
-| Username | `clinic@example.test` |
-| Password | `local-imap-only` |
-| Folders | `INBOX`, `Sent`, `Archive` |
-
-Both published ports bind to host loopback. Set `IMAP_EMULATOR_PORT` and
-`IMAP_EMULATOR_HTTP_PORT` to choose different host ports when using Compose.
-The image is built locally; it does not require a container registry login.
-
-## Seed messages
+The health response is `ok`. Seed a message:
 
 ```sh
 curl -fsS http://localhost:8026/messages \
   -H 'Content-Type: application/json' \
-  -d '{"folder":"INBOX","from":"alice@example.test","to":["clinic@example.test"],"subject":"Historical reply","date":"2020-01-02T03:04:05Z"}'
+  -d '{"from":"alice@example.test","to":["clinic@example.test"],"subject":"Hello"}'
 ```
 
-The response contains `folder` and `message_id`. Missing dates default to now;
-missing Message-IDs are generated. Supply the same `message_id` in two folders
-to exercise an application's deduplication logic. The API also accepts `cc`,
-`bcc`, `internal_date`, `flags` and `body`.
+Connect over implicit TLS to `localhost:1993`, using `clinic@example.test` /
+`local-imap-only`. Trust [the bundled test certificate](testdata/tls/server.crt)
+in your client. The initial folders are `INBOX`, `Sent`, and `Archive`.
 
-For outgoing mail, set `folder` to `Sent`, `from` to the sender, and `to` to
-the recipient. This stores a fixture; no message is sent to any recipient.
+The server supports reading and appending mail. It does not receive SMTP or
+send external mail. Restarting clears all messages. Both published ports bind
+to loopback; the credentials and certificate are public test fixtures.
 
-Full request and response definitions: [openapi.yaml](openapi.yaml).
-`GET /healthz` returns HTTP 200 when the HTTP service is running.
+Stop it with `docker compose down`. For different ports, see
+[run and test the emulator](docs/how-to/run-and-test.md#choose-host-ports).
 
-## Connect your application
+## Development
 
-Use implicit TLS on port 1993, with the test credentials above. Trust
-[`testdata/tls/server.crt`](testdata/tls/server.crt) in your IMAP client's root
-certificate pool. Its names cover `imap-emulator`, `localhost` and `127.0.0.1`.
-The bundled certificate and private key are public test fixtures.
-
-For a Linux Go application in Compose, mount the certificate into its system
-trust directory and connect to the service name:
-
-```yaml
-services:
-  app:
-    volumes:
-      - ./imap-emulator/testdata/tls/server.crt:/etc/ssl/certs/imap-emulator.pem:ro
-  imap-emulator:
-    build: ./imap-emulator
-```
-
-## Behavior and limits
-
-- Mail is stored in memory. Restarting clears it and changes UIDVALIDITY.
-- Reading, searching and appending messages are supported. Folder changes,
-  flag edits, copying via IMAP and deletions are unsupported.
-- Existing message UIDs remain stable while the process is running.
-- HTTP fixture writes and IMAP reads can run concurrently.
-- The service does not receive SMTP or send external mail. Use a separate
-  SMTP capture service if your tests also exercise email delivery.
-- The fixture API is for local tests, uses no authentication, and accepts at
-  most 1 MiB of JSON per request. Use unique addresses and Message-IDs for
-  parallel tests; there is no global reset endpoint.
-
-## Develop and test
-
-Requires the Go version specified in `go.mod`.
-
-```sh
-make test  # TLS round trips, concurrent reads/writes and malformed fixtures
-make run   # uses the bundled certificate; listens on ports 1993 and 8026
-```
-
-Process environment settings:
-
-| Variable | Default |
-| --- | --- |
-| `IMAP_EMULATOR_PORT` | `1993` |
-| `IMAP_EMULATOR_HTTP_PORT` | `8026` |
-| `IMAP_EMULATOR_CERT` | `/certs/server.crt` |
-| `IMAP_EMULATOR_KEY` | `/certs/server.key` |
-
-Unlike Compose's host-port overrides, process variables change the ports the
-binary listens on. Custom certificates can be mounted at the default paths or
-selected through the environment settings.
+Install the Go version specified in [go.mod](go.mod), then run `make test` for
+race-checked tests and `go vet`. See the [development and CI guide](docs/how-to/run-and-test.md).
+The machine-readable HTTP contract is [openapi.yaml](openapi.yaml).
