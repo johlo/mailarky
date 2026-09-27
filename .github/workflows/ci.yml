@@ -11,4 +11,15 @@ jobs:
         with:
           go-version-file: go.mod
       - run: make test
-      - run: docker build -t imap-emulator:ci .
+      - run: docker compose up -d --build --wait --wait-timeout 60
+      - name: Seed a message through the running container
+        run: |
+          curl -fsS http://localhost:8026/messages \
+            -H 'Content-Type: application/json' \
+            -d '{"folder":"INBOX","from":"alice@example.test","to":["clinic@example.test"],"subject":"CI fixture"}'
+      - name: Container logs
+        if: always()
+        run: docker compose logs
+      - name: Stop containers
+        if: always()
+        run: docker compose down

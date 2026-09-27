@@ -9,6 +9,7 @@ FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec4
 COPY --from=builder /imap-emulator /imap-emulator
 # Public test fixtures, not production credentials.
 COPY --chmod=0444 testdata/tls/server.crt testdata/tls/server.key /certs/
+RUN chmod 0755 /certs
 USER 65532:65532
 EXPOSE 1993 8026
 HEALTHCHECK --interval=2s --timeout=3s --retries=15 \
