@@ -1,22 +1,30 @@
 # Mailarky
 
-Mailarky is a disposable SMTP and IMAP server for testing applications that
-**send and read email**. It gives each test **an isolated account** and lets
-tests inject **programmable protocol failures**.
+Mailarky is a standard SMTP and IMAP server built for automated tests. Point
+your application at it instead of a provider such as Gmail or Microsoft 365.
+The application uses its normal mail libraries to send over SMTP and read over
+IMAP, exactly as in production, but mail never leaves your machine.
 
-Your application uses its normal email clients. Your tests create accounts,
-seed incoming history, inspect outgoing mail without changing its read state,
-and inject authentication, command, or message failures through HTTP. SMTP,
-IMAP, and HTTP share the same raw messages, folders, flags, and UIDs.
+Your test code controls Mailarky through an HTTP API. A typical test:
 
-Use it for reply import, mailbox synchronization, retries, and parallel test
-suites. Each account's credentials work for **both SMTP and IMAP**: two tests
-can send to the same `alice@customer.test` address without sharing mail.
+1. **Creates an account** of its own. The username and password work for both
+   sending (SMTP) and reading (IMAP).
+2. **Puts mail in the inbox**, such as a customer reply from last week, so the
+   application has something to read.
+3. **Runs the application**, which sends and reads mail as usual.
+4. **Checks what was sent.** Reading mail through the API doesn't mark it as
+   read, so checking doesn't change what the application sees.
+5. **Makes things fail** when needed, such as a rejected login, a temporary
+   send error, or a dropped connection, and checks that the application recovers.
+6. **Deletes the account.**
 
-Mail catchers such as Mailpit and MailHog capture outgoing SMTP for inspection.
-Mailarky targets applications that also *read* mail over IMAP. It keeps sent
-and received mail in one IMAP-visible store per test, and can make either
-protocol fail on demand.
+Each test gets its own account, so tests can run in parallel. Two tests can
+both send to `alice@customer.test`, and each sees only its own mail.
+
+Tools such as Mailpit and MailHog catch outgoing mail so you can inspect it.
+Mailarky is for applications that also *read* mail, for example to import
+replies or sync a mailbox, and that need both directions tested together,
+including failures.
 
 > [!WARNING]
 > Mailarky is a test service. Its HTTP control API is unauthenticated by
