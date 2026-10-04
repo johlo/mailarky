@@ -1,6 +1,8 @@
 # Mailarky
 
-Mailarky tests **SMTP sending and IMAP reading together**, with **an isolated account per test** and **programmable protocol failures**.
+Mailarky is a disposable SMTP and IMAP server for testing applications that
+**send and read email**. It gives each test **an isolated account** and lets
+tests inject **programmable protocol failures**.
 
 Your application uses its normal email clients. Your tests create accounts,
 seed incoming history, inspect outgoing mail without changing its read state,
@@ -11,35 +13,56 @@ Use it for reply import, mailbox synchronization, retries, and parallel test
 suites. Each account's credentials work for **both SMTP and IMAP**: two tests
 can send to the same `alice@customer.test` address without sharing mail.
 
-Mailarky's protocol implementations are built on
-[emersion/go-imap v2](https://github.com/emersion/go-imap/tree/v2) for IMAP and
-[emersion/go-smtp](https://github.com/emersion/go-smtp) for SMTP. Mailarky uses
-[IMAP](https://github.com/johlo/go-imap/tree/imap-v2-protocol-hooks) and
-[SMTP](https://github.com/johlo/go-smtp/tree/smtp-protocol-hooks) forks that add
-the hooks needed for protocol fault injection.
+Mail catchers such as Mailpit and MailHog capture outgoing SMTP for inspection.
+Mailarky targets applications that also *read* mail over IMAP. It keeps sent
+and received mail in one IMAP-visible store per test, and can make either
+protocol fail on demand.
+
+> [!WARNING]
+> Mailarky is a test service. Its HTTP control API is unauthenticated by
+> default, the default password is public, and the bundled TLS key is a public
+> fixture. Do not expose it to untrusted networks. See [SECURITY.md](SECURITY.md).
+
+Mailarky is pre-1.0. The HTTP API, configuration, and fault rule schema may
+change between minor versions; release notes call out breaking changes.
 
 ## Quick start
 
 ```sh
-git clone https://github.com/johlo/mailarky.git
-cd mailarky
-docker compose --profile webmail up -d --build --wait
+docker run -d --name mailarky \
+  -e MAILARKY_SMTP_TLS_MODE=starttls \
+  -p "127.0.0.1:${MAILARKY_SMTP_PORT:-1025}:1025" \
+  -p "127.0.0.1:${MAILARKY_IMAP_PORT:-1993}:1993" \
+  -p "127.0.0.1:${MAILARKY_HTTP_PORT:-8026}:8026" \
+  ghcr.io/johlo/mailarky:latest
+docker cp mailarky:/certs/server.crt ./mailarky.crt
 ```
+
+Release images become available after the first version tag is published.
+For unreleased source builds, see [run from source](docs/how-to/run-and-test.md#start-locally).
 
 | Interface | Default address |
 | --- | --- |
-| SMTP | `localhost:1025`, with STARTTLS in Compose |
+| SMTP | `localhost:1025`, with STARTTLS |
 | IMAP | `localhost:1993`, implicit TLS |
 | HTTP control API | `http://localhost:8026/api/v1` |
-| Optional Roundcube webmail | <http://localhost:8027> |
 
-Trust [`testdata/tls/server.crt`](testdata/tls/server.crt) in your test clients.
-Log into Roundcube with `user@example.test` / `local-imap-only`, or a test
-account's generated credentials. Omit `--profile webmail` to run only Mailarky.
+Trust the copied `mailarky.crt` in your test clients. The default credentials
+are `user@example.test` / `local-imap-only`, or use a test account's generated
+credentials. For optional Roundcube webmail on port 8027, follow
+[view mail in a browser](docs/how-to/run-and-test.md#view-mail-in-a-browser).
 
 All published ports bind to loopback. Set `MAILARKY_SMTP_PORT`,
-`MAILARKY_IMAP_PORT`, `MAILARKY_HTTP_PORT`, and `MAILARKY_WEBMAIL_PORT` to change
-them. See [configuration](docs/reference/configuration.md) for listener settings.
+`MAILARKY_IMAP_PORT`, and `MAILARKY_HTTP_PORT` to change them in the command
+above. See [configuration](docs/reference/configuration.md) for listener settings.
+Pin an image tag such as `ghcr.io/johlo/mailarky:v0.1.0` in CI;
+`latest` follows stable releases. Stop and remove the container with
+`docker stop mailarky` and `docker rm mailarky`.
+
+To use `go install` or a standalone binary, follow
+[run without Docker](docs/how-to/run-and-test.md#run-without-docker), including
+the local TLS certificate setup. Use `mailarky --help` for flags and
+`mailarky --version` to identify the installed build.
 
 ## An account per test
 
@@ -132,17 +155,24 @@ real SMTP/IMAP sockets, account isolation, persistence, API behavior, fault
 recovery, IMAP updates, and concurrent mutation. `scripts/smoke.py` exercises the
 Docker service using Python's independent SMTP and IMAP clients.
 
-`make run` uses the bundled certificate. Build with
-`go build -o mailarky ./cmd/mailarky` or install a published revision using
-`go install github.com/johlo/mailarky/cmd/mailarky@REVISION`.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for building, testing, updating the
+protocol forks, and publishing releases.
 
-Mailarky imports the public [SMTP](https://github.com/johlo/go-smtp) and
-[IMAP](https://github.com/johlo/go-imap) forks directly under their own module
-paths. `go.mod` pins exact revisions and contains no `replace` directives.
-Each fork retains its upstream license and tests and runs its own CI.
+## Acknowledgements
 
-The IMAP implementation uses [go-imap v2](https://github.com/johlo/go-imap/tree/imap-v2-protocol-hooks)
-with a pinned revision. V2 is still in development upstream; Mailarky keeps
-independent protocol tests around its session backend and fault hooks. The
-listener advertises IMAP4rev1; the library version does not enable IMAP4rev2
-protocol features automatically.
+Mailarky's protocol implementations are built on
+[emersion/go-imap v2](https://github.com/emersion/go-imap/tree/v2) and
+[emersion/go-smtp](https://github.com/emersion/go-smtp). Mailarky imports public
+[IMAP](https://github.com/johlo/go-imap/tree/imap-v2-protocol-hooks) and
+[SMTP](https://github.com/johlo/go-smtp/tree/smtp-protocol-hooks) forks that add
+the hooks needed for protocol fault injection. They use their own module paths,
+so `go.mod` pins exact revisions without `replace` directives. Each fork keeps
+its upstream license and tests and runs its own CI.
+
+go-imap v2 is still in development upstream, so Mailarky keeps independent
+protocol tests around its session backend and fault hooks. The listener
+advertises IMAP4rev1; IMAP4rev2 features are not enabled.
+
+## License
+
+Mailarky is licensed under the [MIT License](LICENSE).

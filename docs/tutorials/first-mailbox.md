@@ -1,20 +1,20 @@
 # Your first test account
 
 This tutorial sends a message through SMTP, inspects it through HTTP, and reads
-it through IMAP. You need Docker Compose and Python 3.
+it through IMAP. You need Docker and Python 3.
 
-Start Mailarky from the repository root:
+Start Mailarky with the [quick start](../../README.md#quick-start), which copies
+the test certificate to `mailarky.crt`. From a source checkout, you can instead
+run `docker compose up -d --build --wait` and use `testdata/tls/server.crt`.
 
-```sh
-docker compose up -d --build --wait
-```
-
-Save the following as a temporary Python script and run it from the repository
-root. It creates and removes its own account.
+Save the following as a temporary Python script in the directory containing
+the certificate and run it. Set `MAILARKY_CA` if the certificate is elsewhere.
+The script creates and removes its own account.
 
 ```python
 import imaplib
 import json
+import os
 import smtplib
 import ssl
 import urllib.request
@@ -31,7 +31,7 @@ def api(method, path, body=None):
 
 account = api("POST", "/api/v1/accounts", {})
 account_base = account["api_base"]
-context = ssl.create_default_context(cafile="testdata/tls/server.crt")
+context = ssl.create_default_context(cafile=os.environ.get("MAILARKY_CA", "mailarky.crt"))
 try:
     with smtplib.SMTP("localhost", 1025) as smtp:
         smtp.starttls(context=context)

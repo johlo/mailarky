@@ -24,3 +24,9 @@
 
 - [Architecture](explanation/architecture.md)
 - [Design choices](explanation/design.md)
+
+## Project
+
+- [Contributing](../CONTRIBUTING.md)
+- [Publish a release](how-to/publish-release.md)
+- [Security policy](../SECURITY.md)

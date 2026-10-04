@@ -61,6 +61,11 @@ SMTP-specific pair is given. HTTP uses TLS when its certificate/key pair is set.
 The Compose file enables SMTP `starttls`; the standalone binary defaults to
 plaintext SMTP. Minimum TLS version is 1.2 for SMTP and IMAP.
 
+The `/certs` defaults refer to files bundled in the Docker image. For a
+standalone binary, supply certificate paths explicitly; see
+[run without Docker](../how-to/run-and-test.md#run-without-docker) to generate
+a local test certificate and configure client trust.
+
 ## Storage and notifications
 
 | Environment variable | Flag | YAML key | Default |

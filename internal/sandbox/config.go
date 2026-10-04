@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -54,8 +53,82 @@ func defaultConfig() configuration {
 	return configuration{SMTPAddress: ":1025", IMAPAddress: ":1993", HTTPAddress: ":8026", Cert: "/certs/server.crt", Key: "/certs/server.key", Username: mailboxUsername, Password: mailboxPassword, SMTPFolder: "Sent", MaxSize: maxMessageBytes, WebhookLimit: time.Second}
 }
 
-func loadConfig(args []string) (configuration, error) {
+// Register flags before loading settings so help always shows built-in defaults.
+func configFlags(c *configuration, sizeMB *int, output io.Writer) (*flag.FlagSet, map[string]string) {
+	fs := flag.NewFlagSet("mailarky", flag.ContinueOnError)
+	fs.SetOutput(output)
+	fs.Usage = func() {
+		fmt.Fprintln(output, "Mailarky: SMTP and IMAP test server with isolated accounts and programmable failures.")
+		fmt.Fprintln(output, "\nUsage:\n  mailarky [flags]\n  mailarky sendmail [flags] [recipient ...]\n  mailarky --version\n  mailarky --help")
+		fmt.Fprintln(output, "\nServer flags (built-in defaults):")
+		fs.PrintDefaults()
+		fmt.Fprintln(output, "\nConfiguration precedence: defaults < MAILARKY_CONFIG YAML < environment < flags.")
+		fmt.Fprintln(output, "MAILARKY_SMTP_PORT, MAILARKY_IMAP_PORT and MAILARKY_HTTP_PORT set listener ports;")
+		fmt.Fprintln(output, "the corresponding MAILARKY_*_BIND_ADDR variables override them.")
+		fmt.Fprintln(output, "\nIMAP requires a TLS certificate and key. Outside Docker, set --imap-tls-cert and --imap-tls-key.")
+		fmt.Fprintln(output, "Setup: https://github.com/johlo/mailarky/blob/main/docs/how-to/run-and-test.md#run-without-docker")
+	}
+	envs := make(map[string]string)
+	str := func(p *string, name, env, description string) {
+		fs.StringVar(p, name, *p, description+" ("+env+")")
+		envs[env] = name
+	}
+	boolean := func(p *bool, name, env, description string) {
+		fs.BoolVar(p, name, *p, description+" ("+env+")")
+		envs[env] = name
+	}
+	integer := func(p *int, name, env, description string) {
+		fs.IntVar(p, name, *p, description+" ("+env+")")
+		envs[env] = name
+	}
+	duration := func(p *time.Duration, name, env, description string) {
+		fs.DurationVar(p, name, *p, description+" ("+env+")")
+		envs[env] = name
+	}
+	str(&c.SMTPAddress, "smtp", "MAILARKY_SMTP_BIND_ADDR", "SMTP listen address")
+	str(&c.IMAPAddress, "imap", "MAILARKY_IMAP_BIND_ADDR", "IMAP TLS listen address")
+	str(&c.HTTPAddress, "http", "MAILARKY_HTTP_BIND_ADDR", "HTTP control API listen address")
+	str(&c.Cert, "imap-tls-cert", "MAILARKY_IMAP_CERT", "IMAP PEM certificate file")
+	str(&c.Key, "imap-tls-key", "MAILARKY_IMAP_KEY", "IMAP PEM private key file")
+	str(&c.Username, "username", "MAILARKY_USERNAME", "Default account username")
+	str(&c.Password, "password", "MAILARKY_PASSWORD", "Default account password")
+	str(&c.SMTPFolder, "smtp-folder", "MAILARKY_SMTP_FOLDER", "Folder for captured SMTP messages")
+	str(&c.SMTPTLS, "smtp-tls-mode", "MAILARKY_SMTP_TLS_MODE", "SMTP TLS mode: starttls, tls, or empty for plaintext")
+	str(&c.SMTPCert, "smtp-tls-cert", "MAILARKY_SMTP_TLS_CERT", "SMTP certificate file (defaults to IMAP certificate)")
+	str(&c.SMTPKey, "smtp-tls-key", "MAILARKY_SMTP_TLS_KEY", "SMTP private key file (defaults to IMAP key)")
+	boolean(&c.RequireTLS, "smtp-require-starttls", "MAILARKY_SMTP_REQUIRE_STARTTLS", "Require STARTTLS before SMTP delivery")
+	boolean(&c.SMTPRequireAuth, "smtp-require-auth", "MAILARKY_SMTP_REQUIRE_AUTH", "Require SMTP authentication")
+	boolean(&c.SMTPAllowInsecureAuth, "smtp-auth-allow-insecure", "MAILARKY_SMTP_AUTH_ALLOW_INSECURE", "Allow SMTP authentication without TLS")
+	str(&c.HTTPAuth, "http-auth", "MAILARKY_HTTP_AUTH", "HTTP credentials as whitespace-separated username:password pairs")
+	str(&c.HTTPAuthFile, "http-auth-file", "MAILARKY_HTTP_AUTH_FILE", "File containing HTTP credentials")
+	str(&c.HTTPCert, "http-tls-cert", "MAILARKY_HTTP_TLS_CERT", "HTTPS certificate file")
+	str(&c.HTTPKey, "http-tls-key", "MAILARKY_HTTP_TLS_KEY", "HTTPS private key file")
+	str(&c.Database, "database", "MAILARKY_DATABASE", "Persistence file (empty for in-memory storage)")
+	integer(&c.MaxMessages, "max-messages", "MAILARKY_MAX_MESSAGES", "Maximum messages per account (0 for unlimited)")
+	duration(&c.MaxAge, "max-age", "MAILARKY_MAX_AGE", "Maximum message age, e.g. 24h (0 for unlimited)")
+	integer(sizeMB, "max-message-size", "MAILARKY_MAX_MESSAGE_SIZE", "Maximum message size in MiB")
+	boolean(&c.IgnoreDuplicates, "ignore-duplicate-ids", "MAILARKY_IGNORE_DUPLICATE_IDS", "Ignore duplicate Message-ID values within an account")
+	str(&c.WebhookURL, "webhook-url", "MAILARKY_WEBHOOK_URL", "Message notification webhook URL")
+	duration(&c.WebhookDelay, "webhook-delay", "MAILARKY_WEBHOOK_DELAY", "Delay before webhook delivery")
+	duration(&c.WebhookLimit, "webhook-interval", "MAILARKY_WEBHOOK_INTERVAL", "Minimum interval between webhook deliveries")
+	str(&c.Label, "label", "MAILARKY_LABEL", "Mailarky-Label webhook header value")
+	boolean(&c.EnableMetrics, "metrics", "MAILARKY_ENABLE_METRICS", "Enable the metrics endpoint")
+	str(&c.Webroot, "webroot", "MAILARKY_WEBROOT", "HTTP URL path prefix")
+	str(&c.DumpPath, "dump-path", "MAILARKY_DUMP_PATH", "Directory for raw .eml message dumps")
+	return fs, envs
+}
+
+func printUsage(output io.Writer) {
 	c := defaultConfig()
+	sizeMB := int(c.MaxSize >> 20)
+	fs, _ := configFlags(&c, &sizeMB, output)
+	fs.Usage()
+}
+
+func loadConfig(args []string, output io.Writer) (configuration, error) {
+	c := defaultConfig()
+	sizeMB := int(c.MaxSize >> 20)
+	fs, envs := configFlags(&c, &sizeMB, output)
 	if name := os.Getenv("MAILARKY_CONFIG"); name != "" {
 		data, err := os.ReadFile(name)
 		if err != nil {
@@ -67,45 +140,7 @@ func loadConfig(args []string) (configuration, error) {
 			return c, err
 		}
 	}
-	fs := flag.NewFlagSet("mailarky", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	var errs []error
-	str := func(p *string, name, env string) {
-		if v, ok := os.LookupEnv(env); ok {
-			*p = v
-		}
-		fs.StringVar(p, name, *p, name)
-	}
-	boolean := func(p *bool, name, env string) {
-		if v, ok := os.LookupEnv(env); ok {
-			var err error
-			*p, err = strconv.ParseBool(v)
-			if err != nil {
-				errs = append(errs, fmt.Errorf("%s: %w", env, err))
-			}
-		}
-		fs.BoolVar(p, name, *p, name)
-	}
-	integer := func(p *int, name, env string) {
-		if v, ok := os.LookupEnv(env); ok {
-			var err error
-			*p, err = strconv.Atoi(v)
-			if err != nil {
-				errs = append(errs, fmt.Errorf("%s: %w", env, err))
-			}
-		}
-		fs.IntVar(p, name, *p, name)
-	}
-	duration := func(p *time.Duration, name, env string) {
-		if v, ok := os.LookupEnv(env); ok {
-			var err error
-			*p, err = time.ParseDuration(v)
-			if err != nil {
-				errs = append(errs, fmt.Errorf("%s: %w", env, err))
-			}
-		}
-		fs.DurationVar(p, name, *p, name)
-	}
+	sizeMB = int(c.MaxSize >> 20)
 	for _, pair := range []struct {
 		p   *string
 		env string
@@ -114,37 +149,14 @@ func loadConfig(args []string) (configuration, error) {
 			*pair.p = ":" + v
 		}
 	}
-	str(&c.SMTPAddress, "smtp", "MAILARKY_SMTP_BIND_ADDR")
-	str(&c.IMAPAddress, "imap", "MAILARKY_IMAP_BIND_ADDR")
-	str(&c.HTTPAddress, "http", "MAILARKY_HTTP_BIND_ADDR")
-	str(&c.Cert, "imap-tls-cert", "MAILARKY_IMAP_CERT")
-	str(&c.Key, "imap-tls-key", "MAILARKY_IMAP_KEY")
-	str(&c.Username, "username", "MAILARKY_USERNAME")
-	str(&c.Password, "password", "MAILARKY_PASSWORD")
-	str(&c.SMTPFolder, "smtp-folder", "MAILARKY_SMTP_FOLDER")
-	str(&c.SMTPTLS, "smtp-tls-mode", "MAILARKY_SMTP_TLS_MODE")
-	str(&c.SMTPCert, "smtp-tls-cert", "MAILARKY_SMTP_TLS_CERT")
-	str(&c.SMTPKey, "smtp-tls-key", "MAILARKY_SMTP_TLS_KEY")
-	boolean(&c.RequireTLS, "smtp-require-starttls", "MAILARKY_SMTP_REQUIRE_STARTTLS")
-	boolean(&c.SMTPRequireAuth, "smtp-require-auth", "MAILARKY_SMTP_REQUIRE_AUTH")
-	boolean(&c.SMTPAllowInsecureAuth, "smtp-auth-allow-insecure", "MAILARKY_SMTP_AUTH_ALLOW_INSECURE")
-	str(&c.HTTPAuth, "http-auth", "MAILARKY_HTTP_AUTH")
-	str(&c.HTTPAuthFile, "http-auth-file", "MAILARKY_HTTP_AUTH_FILE")
-	str(&c.HTTPCert, "http-tls-cert", "MAILARKY_HTTP_TLS_CERT")
-	str(&c.HTTPKey, "http-tls-key", "MAILARKY_HTTP_TLS_KEY")
-	str(&c.Database, "database", "MAILARKY_DATABASE")
-	integer(&c.MaxMessages, "max-messages", "MAILARKY_MAX_MESSAGES")
-	duration(&c.MaxAge, "max-age", "MAILARKY_MAX_AGE")
-	sizeMB := int(c.MaxSize >> 20)
-	integer(&sizeMB, "max-message-size", "MAILARKY_MAX_MESSAGE_SIZE")
-	boolean(&c.IgnoreDuplicates, "ignore-duplicate-ids", "MAILARKY_IGNORE_DUPLICATE_IDS")
-	str(&c.WebhookURL, "webhook-url", "MAILARKY_WEBHOOK_URL")
-	duration(&c.WebhookDelay, "webhook-delay", "MAILARKY_WEBHOOK_DELAY")
-	duration(&c.WebhookLimit, "webhook-interval", "MAILARKY_WEBHOOK_INTERVAL")
-	str(&c.Label, "label", "MAILARKY_LABEL")
-	boolean(&c.EnableMetrics, "metrics", "MAILARKY_ENABLE_METRICS")
-	str(&c.Webroot, "webroot", "MAILARKY_WEBROOT")
-	str(&c.DumpPath, "dump-path", "MAILARKY_DUMP_PATH")
+	var errs []error
+	for env, name := range envs {
+		if value, ok := os.LookupEnv(env); ok {
+			if err := fs.Set(name, value); err != nil {
+				errs = append(errs, fmt.Errorf("%s: %w", env, err))
+			}
+		}
+	}
 	if err := fs.Parse(args); err != nil {
 		return c, err
 	}

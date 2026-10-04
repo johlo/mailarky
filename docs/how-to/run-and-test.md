@@ -2,7 +2,12 @@
 
 ## Start locally
 
+For a published image, use the [quick start](../../README.md#quick-start).
+To build from source:
+
 ```sh
+git clone https://github.com/johlo/mailarky.git
+cd mailarky
 docker compose up -d --build --wait
 python3 scripts/smoke.py
 ```
@@ -21,7 +26,76 @@ Compose host-port settings do not change container listener ports. When
 running the binary directly, the same port variables change listener ports.
 Full bind-address variables override them; see [configuration](../reference/configuration.md).
 
+## Run without Docker
+
+Download the archive for your operating system and architecture from
+[GitHub Releases](https://github.com/johlo/mailarky/releases). Linux and macOS
+use `.tar.gz`; Windows uses `.zip`. macOS archives are named `darwin`.
+Verify the archive against `checksums.txt`, then extract it. Each archive
+contains the executable, documentation, and the public test certificate/key
+in `testdata/tls`. For example, from the extracted directory on Linux or macOS:
+
+```sh
+./mailarky \
+  --imap-tls-cert=testdata/tls/server.crt \
+  --imap-tls-key=testdata/tls/server.key \
+  --smtp-tls-mode=starttls \
+  --smtp=127.0.0.1:1025 \
+  --imap=127.0.0.1:1993 \
+  --http=127.0.0.1:8026
+```
+
+Trust `testdata/tls/server.crt` in your test clients. On Windows, use
+`mailarky.exe` and put the arguments on one line. Alternatively, install with
+Go and generate your own test certificate as follows.
+
+Install with Go, using the version required by [`go.mod`](../../go.mod) or newer:
+
+```sh
+go install github.com/johlo/mailarky/cmd/mailarky@latest
+mailarky --help
+mailarky --version
+```
+
+Ensure Go's install directory (`GOBIN`, or `$(go env GOPATH)/bin` by default)
+is on your `PATH`. Replace `@latest` with a release tag or commit to pin a build.
+
+IMAP requires TLS. The Docker image supplies certificates at `/certs`; a
+standalone binary needs certificate files of its own. With OpenSSL 1.1.1 or
+newer, generate a local test certificate in your working directory:
+
+```sh
+mkdir -p mailarky-certs
+openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 365 \
+  -keyout mailarky-certs/server.key -out mailarky-certs/server.crt \
+  -subj '/CN=Mailarky local test server' \
+  -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1' \
+  -addext 'basicConstraints=critical,CA:TRUE' \
+  -addext 'extendedKeyUsage=serverAuth'
+
+mailarky \
+  --imap-tls-cert=mailarky-certs/server.crt \
+  --imap-tls-key=mailarky-certs/server.key \
+  --smtp-tls-mode=starttls \
+  --smtp=127.0.0.1:1025 \
+  --imap=127.0.0.1:1993 \
+  --http=127.0.0.1:8026
+```
+
+Trust `mailarky-certs/server.crt` in your SMTP and IMAP clients. SMTP STARTTLS
+uses the same certificate. The default account is `user@example.test` with
+password `local-imap-only`; tests can create isolated accounts through HTTP.
+In another terminal, check `curl -fsS http://127.0.0.1:8026/healthz`.
+Stop the server with Ctrl-C.
+
+You can also supply an existing certificate and key with `MAILARKY_IMAP_CERT`
+and `MAILARKY_IMAP_KEY`. From a source checkout, `make run` uses the bundled
+test certificate. See [TLS configuration](../reference/configuration.md#tls)
+for separate SMTP certificates and other options.
+
 ## View mail in a browser
+
+From a source checkout, start the optional Roundcube profile:
 
 ```sh
 docker compose --profile webmail up -d --build --wait
@@ -61,6 +135,21 @@ make test
 go build -o mailarky ./cmd/mailarky
 make run
 ```
+
+`mailarky --version` reports the version embedded by Go, including the module
+version for `go install ...@VERSION`. Local builds include the Git revision
+and a `dirty` marker when that metadata is available; builds without version
+metadata report `devel`. To set a release version explicitly, build with:
+
+```sh
+go build -trimpath \
+  -ldflags '-X github.com/johlo/mailarky/internal/sandbox.version=v0.1.0' \
+  -o mailarky ./cmd/mailarky
+```
+
+Use the version being released in place of `v0.1.0`. Builds without Git
+metadata, such as Docker builds, can also set
+`-X github.com/johlo/mailarky/internal/sandbox.revision=COMMIT`.
 
 Go tests exercise the API and real SMTP/IMAP sockets, including concurrent
 account isolation, fault recovery, read flags, sequence numbers, IDLE,
