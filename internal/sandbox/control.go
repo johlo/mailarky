@@ -3,7 +3,6 @@ package sandbox
 import (
 	"fmt"
 	"mime"
-	"net/http"
 	"net/mail"
 	"strings"
 	"time"
@@ -50,7 +49,7 @@ func (req *messageRequest) rawMessage() (string, time.Time, error) {
 		return "", time.Time{}, fmt.Errorf("recipients are required and subject must be a single line")
 	}
 	if req.MessageID == "" {
-		req.MessageID = uuid.NewString() + "@imap.example.test"
+		req.MessageID = uuid.NewString() + "@mailarky.test"
 	}
 	req.MessageID = strings.TrimSuffix(strings.TrimPrefix(req.MessageID, "<"), ">")
 	if req.MessageID == "" || strings.ContainsAny(req.MessageID, "<> \t\r\n") {
@@ -67,12 +66,4 @@ func (req *messageRequest) rawMessage() (string, time.Time, error) {
 	fmt.Fprintf(&raw, "Subject: %s\r\nMessage-ID: <%s>\r\nDate: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n%s",
 		mime.QEncoding.Encode("UTF-8", req.Subject), req.MessageID, date.Format(time.RFC1123Z), req.Body)
 	return raw.String(), internalDate, nil
-}
-
-func controlHandler(b *mailboxBackend) http.Handler {
-	a, err := newAPI(b)
-	if err != nil {
-		panic(err)
-	}
-	return a.handler()
 }

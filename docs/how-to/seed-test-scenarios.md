@@ -1,79 +1,51 @@
-# Seed test data
+# Seed history and custom MIME
 
-There are three ways to put mail into a mailbox without SMTP:
+Use an account's `api_base` for all fixture operations. JSON fixtures and raw
+MIME share `POST {api_base}/messages`; the Content-Type selects the format.
 
-| Method | Use it for |
-| --- | --- |
-| `POST /messages` | Plain-text mail with any date, folder and flags |
-| `POST /api/v1/messages/raw?folder=…` | Exact MIME from an `.eml` file, including custom headers and attachments |
-| `POST /api/v1/send` | Multipart mail built from JSON, with base64 attachments |
-
-The examples use the default account. For a [separate mailbox](separate-mailboxes.md),
-prefix the paths with its `api_base`.
-
-## Historical mail
+## Historical messages
 
 ```sh
-curl -fsS http://localhost:8026/messages -H 'Content-Type: application/json' -d '{
-  "from": "alice@example.test",
-  "to": ["clinic@example.test"],
-  "subject": "Historical reply",
-  "message_id": "history@example.test",
-  "date": "2020-01-02T03:04:05Z",
-  "internal_date": "2021-02-03T04:05:06Z"
-}'
+curl -fsS http://localhost:8026/api/v1/accounts/ACCOUNT_ID/messages \
+  -H 'Content-Type: application/json' -d '{
+    "folder":"INBOX",
+    "from":"Alice <alice@customer.test>",
+    "to":["app@example.test"],
+    "subject":"Earlier reply",
+    "message_id":"history@example.test",
+    "date":"2020-01-02T03:04:05Z",
+    "internal_date":"2021-02-03T04:05:06Z",
+    "body":"A reply that existed before the application started",
+    "flags":[]
+  }'
 ```
 
-`date` becomes the `Date` header. `internal_date` is when the message entered
-the mailbox, as IMAP reports it. It defaults to `date`, and both default to now.
-The response (201) contains `folder` and `message_id`.
+`date` becomes the message's Date header. `internal_date` controls IMAP's
+INTERNALDATE. Set `flags` to `["\\Seen"]` for an already-read fixture.
+The HTTP response includes the stored ID and IMAP UID.
 
-## Sent mail with flags
+## Attachments, threading, or unusual MIME
+
+Prepare a `.eml` with the desired headers and MIME parts, then import it:
 
 ```sh
-curl -fsS http://localhost:8026/messages -H 'Content-Type: application/json' -d '{
-  "folder": "Sent",
-  "from": "Clinic <clinic@example.test>",
-  "to": ["alice@example.test"],
-  "subject": "Your appointment",
-  "flags": ["\\Seen"],
-  "body": "A synthetic appointment message."
-}'
+curl -fsS 'http://localhost:8026/api/v1/accounts/ACCOUNT_ID/messages?folder=INBOX' \
+  -H 'Content-Type: message/rfc822' --data-binary @message.eml
 ```
 
-Fixtures are only stored, never delivered. Mail your application sends over
-SMTP already lands in `Sent`, so you don't need to add a copy.
+Use `In-Reply-To` and `References` to seed a thread. Reuse a Message-ID in
+multiple folders to test the application's deduplication. Duplicate IDs are
+accepted by default. Arbitrary raw content must still parse as MIME within
+configured size, nesting, and part-count limits.
 
-## Duplicates across folders
+Create an additional folder first using
+`POST {api_base}/folders` with `{"name":"History"}`. IMAP APPEND is also available
+when the test should seed mail through an independent protocol client.
 
-Post the same `message_id` to `INBOX` and `Archive` to test your importer's
-deduplication. Every POST adds a new copy. Keep `MP_IGNORE_DUPLICATE_IDS` off
-(the default), or the sandbox drops the duplicates itself.
+## Reset a scenario
 
-## Custom MIME
-
-```sh
-curl -fsS 'http://localhost:8026/api/v1/messages/raw?folder=INBOX' \
-  -H 'Content-Type: message/rfc822' --data-binary @fixture.eml
-```
-
-The raw bytes are stored unchanged, including headers such as `X-Test-ID`
-that [toxics](toxics.md) can select on.
-
-## Clean up
-
-Delete only the IDs your test created:
-
-```sh
-curl -fsS -X DELETE http://localhost:8026/api/v1/messages \
-  -H 'Content-Type: application/json' -d '{"IDs":["MESSAGE-UUID"]}'
-```
-
-An empty or missing `IDs` list deletes **all** mail in the account. With a
-separate mailbox per test, deleting the mailbox is simpler.
-
-## Parallel tests
-
-Use a unique address or Message-ID per test, and search by it. Don't assert
-total message counts in a shared account. Seed fixtures before triggering the
-application's sync, then poll for the result with a time limit.
+Delete matching fixtures with
+`DELETE {api_base}/messages?query=message-id:history@example.test`.
+Omit the query to empty the account, or delete the entire account at teardown.
+GET inspection never sets `\Seen`. Change flags explicitly with
+`PATCH {api_base}/messages/{id}` and `{"flags":[]}`.

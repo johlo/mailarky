@@ -11,10 +11,8 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
-	"sync/atomic"
 	"time"
 
-	"github.com/emersion/go-imap/backend"
 	"github.com/google/uuid"
 	bolt "go.etcd.io/bbolt"
 )
@@ -30,24 +28,28 @@ type storeState struct {
 	Messages map[string]*storedMessage
 	Sequence uint64
 }
-type notification struct {
-	Type string
-	Data any
-}
 
-type mailboxBackend struct {
-	mu                                                 sync.RWMutex
-	state                                              storeState
-	config                                             configuration
-	user                                               *mailboxUser
-	db                                                 *bolt.DB
-	done                                               chan struct{}
-	closed                                             sync.Once
-	subscribers                                        map[chan notification]struct{}
-	afterAppend                                        func(*storedMessage)
-	toxics                                             *toxicRegistry
-	started                                            time.Time
-	accepted, rejected, ignored, deleted, acceptedSize atomic.Uint64
+// Store owns only immutable message snapshots, folder state and persistence.
+// Its change callback runs after commit and must not read the store or block.
+type Store struct {
+	mu       sync.RWMutex
+	state    storeState
+	options  storeOptions
+	db       *bolt.DB
+	done     chan struct{}
+	closed   sync.Once
+	changed  chan struct{}
+	onChange func(storeState, storeState)
+}
+type storeOptions struct {
+	MailboxID        string
+	Database         string
+	SMTPFolder       string
+	MaxMessages      int
+	MaxAge           time.Duration
+	MaxSize          int64
+	IgnoreDuplicates bool
+	DumpPath         string
 }
 
 func newValidity() uint32 {
@@ -58,19 +60,11 @@ func newValidity() uint32 {
 	return binary.BigEndian.Uint32(value[:]) | 1
 }
 
-func newMailboxBackend() (*mailboxBackend, error) {
-	c := defaultConfig()
-	c.MaxMessages = 0
-	return openMailbox(c)
-}
-
-func openMailbox(c configuration) (*mailboxBackend, error) {
+func openStore(c storeOptions) (*Store, error) {
 	if !validFolder(c.SMTPFolder) {
 		return nil, errors.New("invalid SMTP folder name")
 	}
-	b := &mailboxBackend{config: c, state: storeState{Folders: map[string]folderState{}, Messages: map[string]*storedMessage{}}, done: make(chan struct{}), subscribers: map[chan notification]struct{}{}, started: time.Now()}
-	b.user = &mailboxUser{store: b, boxes: map[string]*mailbox{}}
-	b.toxics = newToxicRegistry()
+	b := &Store{options: c, state: storeState{Folders: map[string]folderState{}, Messages: map[string]*storedMessage{}}, done: make(chan struct{}), changed: make(chan struct{})}
 	if c.Database != "" {
 		if err := os.MkdirAll(filepath.Dir(c.Database), 0700); err != nil {
 			return nil, err
@@ -107,7 +101,7 @@ func openMailbox(c configuration) (*mailboxBackend, error) {
 				if err := json.Unmarshal(value, &m); err != nil {
 					return err
 				}
-				d, h, err := parseMessage(m.Raw, m.Created, m.EnvelopeFrom, m.EnvelopeTo)
+				d, h, err := parseMessage(m.Raw, m.InternalDate, m.EnvelopeFrom, m.EnvelopeTo)
 				if err != nil {
 					return err
 				}
@@ -129,9 +123,6 @@ func openMailbox(c configuration) (*mailboxBackend, error) {
 			b.state.Folders[name] = folderState{Name: name, NextUID: 1, Subscribed: true, Validity: newValidity()}
 		}
 	}
-	for name, f := range b.state.Folders {
-		b.user.boxes[name] = &mailbox{store: b, name: name, validity: f.Validity}
-	}
 	if _, ok := b.state.Folders[c.SMTPFolder]; !ok {
 		if b.db != nil {
 			b.db.Close()
@@ -148,16 +139,13 @@ func openMailbox(c configuration) (*mailboxBackend, error) {
 	return b, nil
 }
 
-func (b *mailboxBackend) Close() error {
+func (b *Store) Close() error {
 	var err error
 	b.closed.Do(func() {
 		close(b.done)
 		b.mu.Lock()
 		defer b.mu.Unlock()
-		for ch := range b.subscribers {
-			close(ch)
-		}
-		b.subscribers = map[chan notification]struct{}{}
+		close(b.changed)
 		if b.db != nil {
 			err = b.db.Close()
 		}
@@ -177,11 +165,10 @@ func orderedMessages(state storeState, folder string) []*storedMessage {
 func cloneRecord(m *storedMessage) *storedMessage {
 	copy := *m
 	copy.Flags = append([]string{}, m.Flags...)
-	copy.Tags = append([]string{}, m.Tags...)
 	return &copy
 }
 
-func (b *mailboxBackend) mutate(change func(*storeState) error) error {
+func (b *Store) mutate(change func(*storeState) error) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	select {
@@ -238,80 +225,51 @@ func (b *mailboxBackend) mutate(change func(*storeState) error) error {
 		}
 	}
 	b.state = next
-	for id, m := range next.Messages {
-		if before.Messages[id] == nil {
-			b.broadcastLocked(notification{"new", m.summary()})
-		} else if before.Messages[id] != m {
-			b.broadcastLocked(notification{"update", m.summary()})
-		}
+	close(b.changed)
+	b.changed = make(chan struct{})
+	if b.onChange != nil {
+		b.onChange(before, next)
 	}
-	for id := range before.Messages {
-		if next.Messages[id] == nil {
-			b.deleted.Add(1)
-			b.broadcastLocked(notification{"delete", map[string]string{"ID": id}})
-		}
-	}
+
 	return nil
 }
 
-func (b *mailboxBackend) broadcastLocked(n notification) {
-	for ch := range b.subscribers {
-		select {
-		case ch <- n:
-		default:
-			close(ch)
-			delete(b.subscribers, ch)
-		}
-	}
-}
-func (b *mailboxBackend) subscribe() (chan notification, func()) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	ch := make(chan notification, 64)
-	b.subscribers[ch] = struct{}{}
-	return ch, func() {
-		b.mu.Lock()
-		defer b.mu.Unlock()
-		if _, ok := b.subscribers[ch]; ok {
-			delete(b.subscribers, ch)
-			close(ch)
-		}
-	}
-}
-
 type appendOptions struct {
-	Folder      string
-	Date        time.Time
-	Flags, Tags []string
-	From        string
-	To          []string
-	Username    string
-	Notify      bool
+	Folder   string
+	Date     time.Time
+	Flags    []string
+	From     string
+	To       []string
+	Username string
+	Notify   bool
+	Parsed   *parsedMessage
 }
 
-func (b *mailboxBackend) append(raw []byte, options appendOptions) (*storedMessage, error) {
-	if int64(len(raw)) > b.config.MaxSize {
-		return nil, errors.New("message exceeds size limit")
+func (b *Store) append(raw []byte, options appendOptions) (*storedMessage, bool, error) {
+	if int64(len(raw)) > b.options.MaxSize {
+		return nil, false, errors.New("message exceeds size limit")
 	}
 	now := time.Now().UTC()
 	if options.Date.IsZero() {
 		options.Date = now
 	}
-	d, h, err := parseMessage(raw, options.Date, options.From, options.To)
-	if err != nil {
-		return nil, err
+	parsed := options.Parsed
+	if parsed == nil {
+		d, h, err := parseMessage(raw, options.Date, options.From, options.To)
+		if err != nil {
+			return nil, false, err
+		}
+		parsed = &parsedMessage{detail: d, headers: h}
 	}
-	m := &storedMessage{MailboxID: b.config.MailboxID, ID: uuid.NewString(), Folder: options.Folder, Created: now, InternalDate: options.Date, Raw: append([]byte(nil), raw...), Flags: append([]string{}, options.Flags...), Tags: append([]string{}, options.Tags...), EnvelopeFrom: options.From, EnvelopeTo: append([]string{}, options.To...), Username: options.Username, Detail: d, Headers: h}
-	if err := b.applyTags(m); err != nil {
-		return nil, err
-	}
+	d, h := withEnvelope(parsed.detail, options.To), parsed.headers
+	m := &storedMessage{MailboxID: b.options.MailboxID, ID: uuid.NewString(), Folder: options.Folder, Created: now, InternalDate: options.Date, Raw: append([]byte(nil), raw...), Flags: append([]string{}, options.Flags...), EnvelopeFrom: options.From, EnvelopeTo: append([]string{}, options.To...), Username: options.Username, Detail: d, Headers: h}
 	var duplicate *storedMessage
-	err = b.mutate(func(state *storeState) error {
+	err := b.mutate(func(state *storeState) error {
 		folder, ok := state.Folders[options.Folder]
 		if !ok {
-			return backend.ErrNoSuchMailbox
+			return errNoSuchMailbox
 		}
-		if b.config.IgnoreDuplicates && d.MessageID != "" {
+		if b.options.IgnoreDuplicates && d.MessageID != "" {
 			for _, old := range state.Messages {
 				if old.Detail.MessageID == d.MessageID {
 					duplicate = old
@@ -332,39 +290,35 @@ func (b *mailboxBackend) append(raw []byte, options appendOptions) (*storedMessa
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if duplicate != nil {
-		b.ignored.Add(1)
-		return duplicate, nil
+		return duplicate, false, nil
 	}
-	if options.Notify && b.afterAppend != nil {
-		b.afterAppend(m)
-	}
-	if b.config.DumpPath != "" {
-		if err := os.MkdirAll(b.config.DumpPath, 0700); err != nil {
+	if b.options.DumpPath != "" {
+		if err := os.MkdirAll(b.options.DumpPath, 0700); err != nil {
 			log.Printf("message stored but dump directory failed: %v", err)
 		}
-		if err := os.WriteFile(filepath.Join(b.config.DumpPath, m.ID+".eml"), m.Raw, 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(b.options.DumpPath, m.ID+".eml"), m.Raw, 0600); err != nil {
 			log.Printf("message stored but dump failed: %v", err)
 		}
 	}
-	return m, nil
+	return m, true, nil
 }
 
-func (b *mailboxBackend) pruneState(state *storeState, now time.Time) {
+func (b *Store) pruneState(state *storeState, now time.Time) {
 	list := orderedMessages(*state, "")
 	for index, m := range list {
-		if (b.config.MaxMessages > 0 && len(list)-index > b.config.MaxMessages) || (b.config.MaxAge > 0 && m.Created.Before(now.Add(-b.config.MaxAge))) {
+		if (b.options.MaxMessages > 0 && len(list)-index > b.options.MaxMessages) || (b.options.MaxAge > 0 && m.Created.Before(now.Add(-b.options.MaxAge))) {
 			delete(state.Messages, m.ID)
 		}
 	}
 }
-func (b *mailboxBackend) prune() error {
+func (b *Store) prune() error {
 	return b.mutate(func(s *storeState) error { b.pruneState(s, time.Now()); return nil })
 }
 
-func (b *mailboxBackend) get(id string) *storedMessage {
+func (b *Store) get(id string) *storedMessage {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	if id == "latest" {
@@ -379,7 +333,7 @@ func (b *mailboxBackend) get(id string) *storedMessage {
 	}
 	return nil
 }
-func (b *mailboxBackend) snapshot() []*storedMessage {
+func (b *Store) snapshot() []*storedMessage {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	list := orderedMessages(b.state, "")
@@ -387,4 +341,11 @@ func (b *mailboxBackend) snapshot() []*storedMessage {
 		list[i] = cloneRecord(m)
 	}
 	return list
+}
+
+// watch registers atomically with a state read, so IDLE cannot miss a commit.
+func (b *Store) watch() <-chan struct{} {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.changed
 }

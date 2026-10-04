@@ -1,47 +1,89 @@
-# Design
+# Design choices
 
-## One store per account
+Mailarky is a test double for applications that send and read email. Its core
+is account isolation, shared SMTP/IMAP state, and controllable protocol faults.
 
-```
-SMTP ──┐
-HTTP ──┼──▶ account store (raw MIME + flags + tags) ──▶ IMAP / HTTP reads
-IMAP ──┘      APPEND
-```
+## Ownership and delivery
 
-Every way of adding mail goes through the same append path into the account's
-store. HTTP and IMAP therefore see the same message, the same raw bytes and the
-same flags. Nothing is copied or synced between protocols.
+An account represents the application's mail identity. SMTP AUTH and IMAP
+LOGIN use the same credentials. Authenticated submissions are captured in that
+account even when recipients are arbitrary customer addresses. This lets
+parallel tests reuse the same addresses and Message-IDs.
 
-- **Raw MIME is the source of truth.** Parsed headers, bodies and attachments
-  are derived from it for the HTTP API.
-- **Three identifiers, three purposes:** the HTTP `ID` (a UUID), the IMAP `UID`
-  (increasing per folder) and the `Message-ID` header (whatever the sender set).
-- **Accounts are fully separate.** A small manager holds the account list and
-  which SMTP recipient belongs to which account. Everything else is per account.
+Anonymous SMTP has no submitting identity. It routes registered recipient
+addresses to accounts, with unclaimed addresses going to `default`. One
+transaction can create one copy in each target account; repeated addresses
+within an account do not create duplicate copies. Deleted accounts' registered
+addresses remain retired until reassigned, preventing accidental fallback.
+Retired addresses have no expiry, so provisioning and deleting accounts with
+new recipient addresses grows this routing metadata over the instance's lifetime.
 
-## Concurrency
+SMTP provides one DATA result, so a recipient account's content rejection
+rejects the transaction before copies are stored. Account rules are evaluated
+separately. After-phase faults model the uncertain outcome of losing a reply
+following successful storage. Separate bbolt databases do not provide an atomic
+commit across accounts if persistence itself fails partway through fan-out.
+Earlier copies remain stored when a later account fails and SMTP returns 451;
+retrying the transaction can duplicate those earlier deliveries.
 
-Writes happen under a mutex. With persistence on, the bbolt transaction commits
-before the change becomes visible. Reads take a snapshot and do protocol work
-after releasing the lock, so a slow IMAP client never blocks writers.
+## State and responsibilities
 
-## Toxics and isolation
+`Service` owns global configuration, account routing and provisioning, HTTP
+credentials, and the server fault registry. `Account` owns credentials, its
+fault registry, notification workers, and protocol-facing identity. `Store`
+owns raw messages, folders, UIDs, flags, and persistence. Accounts do not carry
+copies of listener or authentication configuration.
 
-A toxic is chosen and counted atomically under a short lock. Its delay or error
-happens **after** the lock is released. A delayed message in one test therefore
-never holds up another test's connection.
+Store mutations copy state, validate the proposed change, and commit bbolt
+before publishing the new snapshot. Readers see consistent snapshots. Raw MIME
+is immutable. Parsed text and metadata are derived caches; attachment payloads
+are decoded on demand. SMTP parses once before fault matching and reuses that
+representation for each delivery.
 
-The sandbox can only isolate tests that use distinct selectors. Two tests
-matching the same address or header will affect each other. That's why there
-is no global failure mode, and why selectors must be specific.
+Retention is opt-in. A count or age limit applies separately to each account
+and spans its folders, so explicitly configured retention can remove seeded
+fixtures. With default settings, mail remains until the test removes it.
 
-One SMTP transaction or IMAP command is indivisible. If it includes messages
-from two tests, a fault for one affects both.
+## IMAP sequence numbers and notifications
 
-IMAP toxics change the response, never the stored message.
+A selected connection keeps a view of message identities. Changes from HTTP,
+retention, or another IMAP session do not silently renumber that view. At safe
+command boundaries and during IDLE, the connection emits EXPUNGE, EXISTS, and
+flag updates and advances its view. Non-UID FETCH, STORE, and SEARCH defer
+EXPUNGE as required by IMAP. Operations resolve the client's sequence numbers
+against that view and mutate live records by immutable ID.
 
-## What it is not
+Updates and fault delays run without holding the store lock. A slow client or
+fault in one connection does not block a different test's mutations. Removing
+an account, deleting a selected folder, or resetting its UIDVALIDITY disconnects
+affected selected clients when they next poll or issue a command.
 
-A single-process test double. There is no clustering. Webhooks and WebSocket
-events are best-effort, so poll the API when a test needs a definite answer.
-Captured mail is never delivered onward, so a test stack can't send real email.
+HTTP inspection is observational. IMAP BODY fetches set `\Seen`; BODY.PEEK,
+metadata-only fetches, and EXAMINE preserve it. Explicit HTTP PATCH and IMAP
+STORE are available when a test intends to change flags.
+
+## Faults and dependency tradeoffs
+
+A fault is a trigger plus filters and an action. Registry location determines
+server or account scope; a message filter narrows either scope. `before`,
+`content`, and `after` identify protocol boundaries without a separate message
+stage vocabulary. Typed action decoding rejects unrelated options. Registries
+claim hits atomically, then execute actions after releasing their lock.
+
+Public forks of go-smtp and go-imap expose protocol hooks. Their own module
+paths allow normal Go dependency resolution without `replace` directives,
+which [versioned go install disallows](https://go.dev/ref/mod#go-install).
+The IMAP backend implements go-imap v2's session API. Each FETCH response is
+written and closed synchronously; completion faults run after those writers
+finish. V2 handles IDLE's continuation and DONE parsing, while Mailarky supplies
+account updates through its session API.
+
+The [v2 fork](https://github.com/johlo/go-imap/tree/mailarky-v2) adds optional
+command, response, greeting, and capability hooks. Its module path is
+`github.com/johlo/go-imap/v2`. Upstream v2 remains in development, so exact
+revision pins and independent socket tests still matter. Mailarky advertises
+IMAP4rev1 and only the extensions its backend implements.
+
+TCP latency, bandwidth, and connection-level failures belong in Toxiproxy.
+Mailarky's hooks target SMTP/IMAP semantics while HTTP remains available for
+assertions and cleanup.

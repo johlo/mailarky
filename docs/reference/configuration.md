@@ -1,117 +1,103 @@
-# Configuration
+# Configuration reference
 
-The defaults suit most test stacks, so you usually need nothing here.
+Settings are applied in this order: defaults, YAML from `MAILARKY_CONFIG`,
+environment, command-line flags. Unknown YAML fields and flags are errors.
+Environment variables use only the `MAILARKY_` prefix; there are no aliases.
 
-Settings are applied in this order, later ones winning: defaults, the YAML file
-named by `MAIL_SANDBOX_CONFIG`, environment variables, command-line flags.
-Unknown YAML keys and flags stop startup.
+All durations use Go duration strings, such as `250ms`, `1.5s`, and `2h`, in
+YAML, environment variables, and flags. Booleans accept `true`/`false`.
 
-## Defaults
+## Listeners and credentials
 
-| | |
-| --- | --- |
-| Ports | SMTP 1025, IMAP 1993 (TLS), HTTP 8026 |
-| Default account | `clinic@example.test` / `local-imap-only`, folders `INBOX`, `Sent`, `Archive` |
-| SMTP deliveries | Stored in `Sent` |
-| Authentication | None on SMTP or HTTP |
-| Storage | In memory, at most 500 messages, 50 MiB per message |
-| Outbound mail | Never sent. The sandbox has no relay. |
+| Environment variable | Flag | YAML key | Default |
+| --- | --- | --- | --- |
+| `MAILARKY_SMTP_PORT` | — | — | `1025` |
+| `MAILARKY_IMAP_PORT` | — | — | `1993` |
+| `MAILARKY_HTTP_PORT` | — | — | `8026` |
+| `MAILARKY_SMTP_BIND_ADDR` | `--smtp` | `smtp` | `:1025` |
+| `MAILARKY_IMAP_BIND_ADDR` | `--imap` | `imap` | `:1993` |
+| `MAILARKY_HTTP_BIND_ADDR` | `--http` | `http` | `:8026` |
+| `MAILARKY_USERNAME` | `--username` | `username` | `user@example.test` |
+| `MAILARKY_PASSWORD` | `--password` | `password` | `local-imap-only` |
+| `MAILARKY_SMTP_FOLDER` | `--smtp-folder` | `smtp_folder` | `Sent` |
+| `MAILARKY_SMTP_REQUIRE_AUTH` | `--smtp-require-auth` | `smtp_require_auth` | `false` |
+| `MAILARKY_SMTP_AUTH_ALLOW_INSECURE` | `--smtp-auth-allow-insecure` | `smtp_allow_insecure_auth` | `false` |
+| `MAILARKY_HTTP_AUTH` | `--http-auth` | `http_auth` | empty |
+| `MAILARKY_HTTP_AUTH_FILE` | `--http-auth-file` | `http_auth_file` | empty |
+| `MAILARKY_WEBROOT` | `--webroot` | `webroot` | empty |
 
-## Settings
+Port variables set `:PORT`; full bind-address variables override them. In
+Compose, port variables control the published host ports and are not passed
+through to container listeners. `MAILARKY_WEBMAIL_PORT` is Compose-only,
+defaulting to 8027 for Roundcube.
 
-Each row lists the YAML key, then the flag and environment variable.
+Username/password configure the default account for both SMTP and IMAP.
+Runtime accounts receive credentials through the HTTP API. SMTP AUTH always
+uses account credentials; `smtp-require-auth` controls whether anonymous SMTP
+is accepted. AUTH on plaintext requires explicitly allowing insecure AUTH.
 
-### Listeners and accounts
+HTTP credentials use whitespace-separated `username:password` entries, or
+one entry per line in a file. Passwords can be plain text or bcrypt hashes.
+The default HTTP API is unauthenticated. `webroot`, when set, must be an absolute
+URL path, such as `/mail`; it prefixes every route and returned `api_base` once.
 
-| YAML | Flag / environment | Purpose |
-| --- | --- | --- |
-| `smtp` | `--smtp` / `MP_SMTP_BIND_ADDR` | SMTP listen address |
-| `imap` | `--imap` / `MAIL_SANDBOX_IMAP_BIND_ADDR` | IMAP listen address |
-| `http` | `--listen` / `MP_UI_BIND_ADDR` | HTTP listen address |
-| `cert`, `key` | `--imap-tls-cert`, `--imap-tls-key` / `MAIL_SANDBOX_IMAP_CERT`, `_KEY` | IMAP certificate |
-| `imap_username`, `imap_password` | `--imap-username`, `--imap-password` / `MAIL_SANDBOX_IMAP_USERNAME`, `_PASSWORD` | Default account login |
-| `smtp_folder` | `--smtp-folder` / `MAIL_SANDBOX_SMTP_FOLDER` | Folder for SMTP deliveries |
+## TLS
 
-`MAIL_SANDBOX_SMTP_PORT`, `_IMAP_PORT` and `_HTTP_PORT` set the process ports.
-In `compose.yaml` they set only the published host ports.
+| Environment variable | Flag | YAML key | Default |
+| --- | --- | --- | --- |
+| `MAILARKY_IMAP_CERT` | `--imap-tls-cert` | `imap_cert` | `/certs/server.crt` |
+| `MAILARKY_IMAP_KEY` | `--imap-tls-key` | `imap_key` | `/certs/server.key` |
+| `MAILARKY_SMTP_TLS_MODE` | `--smtp-tls-mode` | `smtp_tls_mode` | empty |
+| `MAILARKY_SMTP_TLS_CERT` | `--smtp-tls-cert` | `smtp_cert` | empty |
+| `MAILARKY_SMTP_TLS_KEY` | `--smtp-tls-key` | `smtp_key` | empty |
+| `MAILARKY_SMTP_REQUIRE_STARTTLS` | `--smtp-require-starttls` | `smtp_require_starttls` | `false` |
+| `MAILARKY_HTTP_TLS_CERT` | `--http-tls-cert` | `http_cert` | empty |
+| `MAILARKY_HTTP_TLS_KEY` | `--http-tls-key` | `http_key` | empty |
 
-### Storage
+IMAP always uses implicit TLS. SMTP mode is empty (plaintext), `starttls`, or
+`tls` (implicit TLS). `smtp-require-starttls` requires mode `starttls` and rejects
+MAIL until TLS is negotiated. SMTP reuses the IMAP certificate/key when no
+SMTP-specific pair is given. HTTP uses TLS when its certificate/key pair is set.
+The Compose file enables SMTP `starttls`; the standalone binary defaults to
+plaintext SMTP. Minimum TLS version is 1.2 for SMTP and IMAP.
 
-| YAML | Flag / environment | Purpose |
-| --- | --- | --- |
-| `database` | `--database` / `MP_DATABASE` | bbolt file; enables persistence |
-| `max_messages` | `--max` / `MP_MAX_MESSAGES` | Per-account limit (500; `0` = unlimited) |
-| `max_age` | `--max-age` / `MP_MAX_AGE` | Delete mail older than this (e.g. `24h`) |
-| `max_message_bytes` | `--max-message-size` / `MP_MAX_MESSAGE_SIZE` | Size limit (bytes in YAML, MiB otherwise) |
-| `ignore_duplicate_ids` | `--ignore-duplicate-ids` / `MP_IGNORE_DUPLICATE_IDS` | Drop repeated Message-IDs |
-| `dump_path` | `--dump-path` / `MP_DUMP_PATH` | Also write each message as an `.eml` file |
+## Storage and notifications
 
-### SMTP TLS and authentication
+| Environment variable | Flag | YAML key | Default |
+| --- | --- | --- | --- |
+| `MAILARKY_DATABASE` | `--database` | `database` | empty, in memory |
+| `MAILARKY_MAX_MESSAGES` | `--max-messages` | `max_messages` | `0`, unlimited |
+| `MAILARKY_MAX_AGE` | `--max-age` | `max_age` | `0s`, unlimited |
+| `MAILARKY_MAX_MESSAGE_SIZE` | `--max-message-size` | `max_message_bytes` | 50 MiB / 52428800 bytes |
+| `MAILARKY_IGNORE_DUPLICATE_IDS` | `--ignore-duplicate-ids` | `ignore_duplicate_ids` | `false` |
+| `MAILARKY_DUMP_PATH` | `--dump-path` | `dump_path` | empty |
+| `MAILARKY_WEBHOOK_URL` | `--webhook-url` | `webhook_url` | empty |
+| `MAILARKY_WEBHOOK_DELAY` | `--webhook-delay` | `webhook_delay` | `0s` |
+| `MAILARKY_WEBHOOK_INTERVAL` | `--webhook-interval` | `webhook_interval` | `1s` |
+| `MAILARKY_LABEL` | `--label` | `label` | empty |
+| `MAILARKY_ENABLE_METRICS` | `--metrics` | `enable_metrics` | `false` |
 
-| YAML | Flag / environment | Purpose |
-| --- | --- | --- |
-| `smtp_cert`, `smtp_key` | `--smtp-tls-cert`, `--smtp-tls-key` / `MP_SMTP_TLS_CERT`, `_KEY` | Enables optional STARTTLS |
-| `smtp_tls` | `--smtp-tls-mode` / `MAIL_SANDBOX_SMTP_TLS_MODE` | `starttls` or `tls` (may reuse the IMAP certificate) |
-| `require_tls` | `--smtp-require-starttls` / `MP_SMTP_REQUIRE_STARTTLS` | Require STARTTLS |
-| `smtp_require_tls` | `--smtp-require-tls` / `MP_SMTP_REQUIRE_TLS` | Implicit TLS |
-| `smtp_auth_file` | `--smtp-auth-file` / `MP_SMTP_AUTH_FILE` | Credentials file |
-| `smtp_auth` | `MP_SMTP_AUTH` | Inline credentials |
-| `smtp_accept_any` | `--smtp-auth-accept-any` / `MP_SMTP_AUTH_ACCEPT_ANY` | Accept any credentials, or none |
-| `smtp_allow_insecure_auth` | `--smtp-auth-allow-insecure` / `MP_SMTP_AUTH_ALLOW_INSECURE` | Allow AUTH without TLS |
+The size environment variable and flag use integer MiB; the YAML key uses
+bytes. Retention applies independently to each account, across all folders.
+Explicit limits can remove INBOX fixtures when Sent grows. Age cleanup runs
+periodically and on append. Duplicate Message-ID suppression is opt-in and
+spans the account. Fault rules are never persisted.
 
-### HTTP
+The default database path is used for account metadata and the default store;
+additional stores live under `DATABASE.mailboxes/`. Dumps are `.eml` files,
+with separate subdirectories for runtime accounts. A failed dump does not undo
+a successful message commit.
 
-| YAML | Flag / environment | Purpose |
-| --- | --- | --- |
-| `http_cert`, `http_key` | `--ui-tls-cert`, `--ui-tls-key` / `MP_UI_TLS_CERT`, `_KEY` | HTTPS |
-| `http_auth_file`, `http_auth` | `--ui-auth-file` / `MP_UI_AUTH_FILE`, `MP_UI_AUTH` | Basic auth |
-| `send_auth_file`, `send_auth` | `--send-api-auth-file` / `MP_SEND_API_AUTH_FILE`, `MP_SEND_API_AUTH` | Separate auth for `/api/v1/send` |
-| `send_accept_any` | `--send-api-auth-accept-any` / `MP_SEND_API_AUTH_ACCEPT_ANY` | Accept any send credentials |
-| `webroot` | `--webroot` / `MP_WEBROOT` | Path prefix for all routes |
-| `api_cors` | `--api-cors` / `MP_API_CORS` | Allowed CORS origins |
-| `allowed_hosts` | `--allowed-hosts` / `MP_ALLOWED_HOSTS` | Allowed `Host` headers |
-| `enable_prometheus` | `--enable-prometheus` / `MP_ENABLE_PROMETHEUS` | Serve `/metrics` |
+Webhooks use one worker per account, a bounded queue, and up to three attempts.
+`webhook-delay` and `webhook-interval` govern that account's delivery timing.
+`label` supplies the `Mailarky-Label` header. Webhook or WebSocket delivery is
+observability, not durable message delivery.
 
-Health probes skip authentication. If you change `webroot` or enable HTTPS,
-update the Docker health check too.
+## Sendmail helper
 
-### Notifications, tags and checks
-
-| YAML | Flag / environment | Purpose |
-| --- | --- | --- |
-| `webhook_url` | `--webhook-url` / `MP_WEBHOOK_URL` | POST a summary of each new message |
-| `webhook_delay`, `webhook_interval` | `--webhook-delay`, `--webhook-limit` / `MP_WEBHOOK_DELAY`, `MP_WEBHOOK_LIMIT` | Delay and minimum interval (seconds in env) |
-| `label` | `--label` / `MP_LABEL` | Sent as the `Mail-Sandbox-Label` webhook header |
-| `tags_disable` | `--tags-disable` / `MP_TAGS_DISABLE` | `x-tags`, `plus-addresses` |
-| `tags_config`, `tag` | `--tags-config`, `--tag` / `MP_TAGS_CONFIG`, `MP_TAG` | Automatic tagging rules |
-| `tags_username`, `tags_title_case` | `--tags-username`, `--tags-title-case` / `MP_TAGS_USERNAME`, `MP_TAGS_TITLE_CASE` | Tag by SMTP username; title-case tags |
-| `spamassassin` | `--spamassassin` / `MP_SPAMASSASSIN` | spamd `host:port` |
-| `allow_internal_http_requests` | `--allow-internal-http-requests` / `MP_ALLOW_INTERNAL_HTTP_REQUESTS` | Let link/CSS checks reach private addresses |
-| `block_remote_css_and_fonts` | `--block-remote-css-and-fonts` / `MP_BLOCK_REMOTE_CSS_AND_FONTS` | Don't fetch external stylesheets |
-
-Durations in YAML and flags use Go syntax (`500ms`, `24h`). Boolean flags use
-`--flag=value`.
-
-## Credentials
-
-Credential files hold one `username:password` per line, as plain text or a
-bcrypt hash. Inline `MP_*_AUTH` variables take space-separated pairs. SMTP
-supports PLAIN and LOGIN.
-
-Accounts created through `/api/v1/mailboxes` have their own IMAP credentials.
-They use the server-wide SMTP and HTTP settings above.
-
-## Previous environment names
-
-Names from the `imap-emulator` era still work. The new name wins if both are set.
-
-| Old | New |
-| --- | --- |
-| `MAIL_EMULATOR_CONFIG` | `MAIL_SANDBOX_CONFIG` |
-| `SMTP_EMULATOR_PORT`, `IMAP_EMULATOR_PORT`, `IMAP_EMULATOR_HTTP_PORT` | `MAIL_SANDBOX_SMTP_PORT`, `_IMAP_PORT`, `_HTTP_PORT` |
-| `IMAP_EMULATOR_BIND_ADDR`, `_CERT`, `_KEY`, `_USERNAME`, `_PASSWORD` | `MAIL_SANDBOX_IMAP_*` equivalents |
-| `SMTP_EMULATOR_FOLDER`, `SMTP_EMULATOR_TLS_MODE` | `MAIL_SANDBOX_SMTP_FOLDER`, `_SMTP_TLS_MODE` |
-| `IMAP_EMULATOR_HTTP_URL` (smoke script) | `MAIL_SANDBOX_HTTP_URL` |
-
-`enable_chaos` and `chaos_triggers` are accepted only to fail with an error.
-Use [toxics](../how-to/toxics.md) instead.
+`mailarky sendmail` accepts `-f`, `-t`, `-i`, `-oi`, `-S host:port`, and `-ca file`.
+`MAILARKY_SENDMAIL_SMTP_ADDR` supplies the default host/port (`localhost:1025`).
+When STARTTLS is offered, it verifies TLS using system roots plus
+`MAILARKY_SENDMAIL_CA` (or `-ca`). Inside the image, the bundled test certificate
+is trusted by default. This helper uses anonymous SMTP recipient routing. Use an application SMTP
+client with account credentials when test isolation depends on AUTH.

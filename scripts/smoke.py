@@ -1,94 +1,103 @@
 #!/usr/bin/env python3
-"""Container smoke test; standard library only, unique mail and toxic ownership."""
+"""Exercise the Compose service using independent standard-library clients."""
 import imaplib
 import json
 import os
 from pathlib import Path
 import smtplib
 import ssl
-import urllib.parse
 import urllib.request
 import uuid
-from email.message import EmailMessage
 
-api = os.environ.get('MAIL_SANDBOX_HTTP_URL', os.environ.get('IMAP_EMULATOR_HTTP_URL', 'http://localhost:8026'))
-smtp_port = int(os.environ.get('MAIL_SANDBOX_SMTP_PORT', os.environ.get('SMTP_EMULATOR_PORT', '1025')))
-imap_port = int(os.environ.get('MAIL_SANDBOX_IMAP_PORT', os.environ.get('IMAP_EMULATOR_PORT', '1993')))
-token = str(uuid.uuid4())
-name = 'smoke-' + token
-ids = []
-accounts = []
+base = os.environ.get("MAILARKY_HTTP_URL", "http://localhost:8026").rstrip("/")
+host = os.environ.get("MAILARKY_SMOKE_HOST", "localhost")
+smtp_port = int(os.environ.get("MAILARKY_SMTP_PORT", "1025"))
+imap_port = int(os.environ.get("MAILARKY_IMAP_PORT", "1993"))
+context = ssl.create_default_context(cafile=str(Path(__file__).resolve().parents[1] / "testdata/tls/server.crt"))
 
-def call(path, method='GET', data=None):
-    payload = None if data is None else json.dumps(data).encode()
-    request = urllib.request.Request(api + path, data=payload, method=method,
-                                     headers={'Content-Type': 'application/json'})
+
+def api(method, path, body=None):
+    data = json.dumps(body).encode() if body is not None else None
+    request = urllib.request.Request(base + path, data, method=method,
+                                     headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(request, timeout=10) as response:
-        body = response.read()
-        return json.loads(body) if response.headers.get_content_type() == 'application/json' else body
+        raw = response.read()
+        return json.loads(raw) if raw else None
 
-def send(identifier, recipient=None):
-    mail = EmailMessage()
-    mail['From'] = 'smoke@example.test'
-    mail['To'] = recipient or token + '@example.test'
-    mail['Message-ID'] = '<' + identifier + '@example.test>'
-    mail['Subject'] = token
-    mail.set_content('Container SMTP/HTTP/IMAP round trip')
-    with smtplib.SMTP('localhost', smtp_port, timeout=10) as smtp:
-        smtp.send_message(mail)
 
-call('/api/v1/toxics', 'POST', {
-    'name': name, 'type': 'smtp_reject', 'selector': {'message_id': token + '-reject@example.test'},
-    'attributes': {'code': 451}, 'max_hits': 1,
-})
+def mime(message_id):
+    return (f"From: app@example.test\r\nTo: alice@customer.test\r\n"
+            f"Subject: Mailarky smoke\r\nMessage-ID: <{message_id}>\r\n"
+            f"Content-Type: text/plain; charset=utf-8\r\n\r\nHello {message_id}\r\n").encode()
+
+
+def submit(account, message_id, recipients=None):
+    with smtplib.SMTP(host, smtp_port, timeout=10) as smtp:
+        if account is not None:
+            smtp.starttls(context=context)
+            smtp.login(account["username"], account["password"])
+        smtp.sendmail("app@example.test", recipients or ["alice@customer.test"], mime(message_id))
+
+
+accounts = []
 try:
-    try:
-        send(token + '-reject')
-        raise AssertionError('Scoped rejection did not fire')
-    except smtplib.SMTPDataError as error:
-        assert error.smtp_code == 451, error
-    send(token)
-    messages = call('/api/v1/search?query=' + urllib.parse.quote('subject:' + token))['messages']
-    ids = [m['ID'] for m in messages]
-    assert len(messages) == 1 and messages[0]['Folder'] == 'Sent', messages
-    raw = call('/api/v1/message/' + ids[0] + '/raw')
-    context = ssl.create_default_context(cafile=str(Path(__file__).resolve().parents[1] / 'testdata/tls/server.crt'))
-    with imaplib.IMAP4_SSL('localhost', imap_port, ssl_context=context, timeout=10) as imap:
-        imap.login('clinic@example.test', 'local-imap-only')
-        imap.select('Sent', readonly=True)
-        status, found = imap.uid('search', None, 'HEADER', 'Message-ID', token + '@example.test')
-        assert status == 'OK' and len(found[0].split()) == 1, found
-        status, body = imap.uid('fetch', found[0], '(BODY.PEEK[])')
-        assert status == 'OK' and body[0][1] == raw, body
-    assert call('/api/v1/toxics/' + name)['hits'] == 1
-    # Account scopes permit identical message IDs and toxic names safely.
+    assert api("GET", "/healthz")["status"] == "ok"
     for _ in range(2):
-        accounts.append(call('/api/v1/mailboxes', 'POST', {}))
+        accounts.append(api("POST", "/api/v1/accounts", {}))
     first, second = accounts
-    identifier = 'account-' + token
-    call(first['api_base'] + '/api/v1/toxics', 'POST', {
-        'name': name, 'type': 'smtp_reject',
-        'selector': {'message_id': identifier + '@example.test'}, 'attributes': {'code': 451},
+    message_id = f"smoke-{uuid.uuid4()}@example.test"
+    for account in accounts:
+        submit(account, message_id)
+        listing = api("GET", account["api_base"] + "/messages")
+        assert listing["total"] == 1
+        assert listing["messages"][0]["message_id"] == message_id
+    message = api("GET", first["api_base"] + "/messages")["messages"][0]
+    message_path = first["api_base"] + "/messages/" + message["id"]
+    assert api("GET", message_path)["read"] is False
+
+    with imaplib.IMAP4_SSL(host, imap_port, ssl_context=context, timeout=10) as imap:
+        imap.login(first["username"], first["password"])
+        assert imap.select("Sent")[0] == "OK"
+        status, data = imap.uid("search", None, "ALL")
+        assert status == "OK" and data[0] == b"1"
+        status, body = imap.uid("fetch", data[0], "(BODY.PEEK[])")
+        assert status == "OK" and mime(message_id) == body[0][1]
+        assert api("GET", message_path)["read"] is False
+        assert imap.uid("fetch", data[0], "(BODY[])")[0] == "OK"
+        assert api("GET", message_path)["read"] is True
+
+        api("POST", first["api_base"] + "/faults", {
+            "name": "select-once", "max_hits": 1,
+            "trigger": {"protocol": "imap", "command": "SELECT", "phase": "before"},
+            "filter": {"folder": "INBOX"},
+            "action": {"type": "reject", "status": "NO", "response_code": "UNAVAILABLE"},
+        })
+        assert imap.select("INBOX")[0] == "NO"
+        assert imap.select("INBOX")[0] == "OK"
+
+    retry_id = f"retry-{uuid.uuid4()}@example.test"
+    api("POST", first["api_base"] + "/faults", {
+        "name": "reject-once", "max_hits": 1,
+        "trigger": {"protocol": "smtp", "command": "DATA", "phase": "content"},
+        "filter": {"message": {"message_id": retry_id}},
+        "action": {"type": "reject", "code": 451, "enhanced_code": "4.3.0"},
     })
     try:
-        send(identifier, first['recipients'][0])
-        raise AssertionError('Account-scoped rejection did not fire')
+        submit(first, retry_id)
     except smtplib.SMTPDataError as error:
-        assert error.smtp_code == 451, error
-    send(identifier, second['recipients'][0])
-    assert call(first['api_base'] + '/api/v1/messages')['total'] == 0
-    isolated = call(second['api_base'] + '/api/v1/messages')['messages']
-    assert len(isolated) == 1 and isolated[0]['MailboxID'] == second['id'], isolated
-    assert len(call('/api/v1/search?query=' + urllib.parse.quote('subject:' + token))['messages']) == 1
-    with imaplib.IMAP4_SSL('localhost', imap_port, ssl_context=context, timeout=10) as imap:
-        imap.login(second['username'], second['password'])
-        imap.select('Sent', readonly=True)
-        status, found = imap.uid('search', None, 'HEADER', 'Message-ID', identifier + '@example.test')
-        assert status == 'OK' and len(found[0].split()) == 1, found
-    print('SMTP, HTTP, verified TLS IMAP, scoped toxics and separate accounts passed')
+        assert error.smtp_code == 451
+    else:
+        raise AssertionError("SMTP content fault did not reject")
+    assert api("GET", first["api_base"] + "/messages")["total"] == 1
+    submit(first, retry_id)
+    assert api("GET", first["api_base"] + "/faults/reject-once")["hits"] == 1
+    assert api("GET", second["api_base"] + "/messages")["total"] == 1
+
+    submit(None, f"fanout-{uuid.uuid4()}@example.test",
+           [first["recipients"][0], second["recipients"][0]])
+    assert api("GET", first["api_base"] + "/messages")["total"] == 3
+    assert api("GET", second["api_base"] + "/messages")["total"] == 2
+    print("Authenticated SMTP, fan-out, HTTP inspection, verified TLS IMAP, read flags, faults and recovery passed")
 finally:
     for account in accounts:
-        call('/api/v1/mailboxes/' + account['id'], 'DELETE')
-    call('/api/v1/toxics/' + name, 'DELETE')
-    if ids:
-        call('/api/v1/messages', 'DELETE', {'IDs': ids})
+        api("DELETE", "/api/v1/accounts/" + account["id"])

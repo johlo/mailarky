@@ -9,9 +9,9 @@
   </defs>
   <rect x="0" y="0" width="1580" height="726" fill="#111111"/>
   <path d="M396 254 H1069 a8 8 0 0 1 8 8 V678 a8 8 0 0 1 -8 8 H396 a8 8 0 0 1 -8 -8 V262 a8 8 0 0 1 8 -8 Z" fill="none" stroke="#486544"/>
-  <text x="402" y="282.4" fill="#d9d9d9" text-anchor="start">Mail Sandbox <tspan fill="#8b8b8b">[Software system]</tspan></text>
+  <text x="402" y="282.4" fill="#d9d9d9" text-anchor="start">Mailarky <tspan fill="#8b8b8b">[Software system]</tspan></text>
   <path d="M757 297 H1055 a8 8 0 0 1 8 8 V431 a8 8 0 0 1 -8 8 H757 a8 8 0 0 1 -8 -8 V305 a8 8 0 0 1 8 -8 Z" fill="#142814" stroke="#486544"/>
-  <text x="906" y="325.4" fill="#d9d9d9" text-anchor="middle">Mail Sandbox service</text>
+  <text x="906" y="325.4" fill="#d9d9d9" text-anchor="middle">Mailarky service</text>
   <text x="906" y="344.4" fill="#8b8b8b" text-anchor="middle">[Container: Go, Docker image]</text>
   <text x="906" y="363.4" fill="#d9d9d9" text-anchor="middle">Accepts SMTP on 1025, serves TLS</text>
   <text x="906" y="382.4" fill="#d9d9d9" text-anchor="middle">IMAP on 1993 and the HTTP API on</text>
@@ -37,25 +37,25 @@
   <path d="M48 297 H270 a8 8 0 0 1 8 8 V393 a8 8 0 0 1 -8 8 H48 a8 8 0 0 1 -8 -8 V305 a8 8 0 0 1 8 -8 Z" fill="#191728" stroke="#4f5367"/>
   <text x="159" y="325.4" fill="#d9d9d9" text-anchor="middle">Application under test</text>
   <text x="159" y="344.4" fill="#8b8b8b" text-anchor="middle">[External system]</text>
-  <text x="159" y="363.4" fill="#d9d9d9" text-anchor="middle">Sends email and imports a</text>
-  <text x="159" y="382.4" fill="#d9d9d9" text-anchor="middle">mailbox</text>
+  <text x="159" y="363.4" fill="#d9d9d9" text-anchor="middle">Sends and reads mail with</text>
+  <text x="159" y="382.4" fill="#d9d9d9" text-anchor="middle">a test account</text>
   <path d="M443 40 H674 a8 8 0 0 1 8 8 V136 a8 8 0 0 1 -8 8 H443 a8 8 0 0 1 -8 -8 V48 a8 8 0 0 1 8 -8 Z" fill="#460000" stroke="#8f3a3a"/>
   <text x="558.5" y="68.4" fill="#d9d9d9" text-anchor="middle">Test suite</text>
   <text x="558.5" y="87.4" fill="#8b8b8b" text-anchor="middle">[Person or CI job]</text>
   <text x="558.5" y="106.4" fill="#d9d9d9" text-anchor="middle">Drives the application and</text>
   <text x="558.5" y="125.4" fill="#d9d9d9" text-anchor="middle">asserts on its mail</text>
-  <path d="M1281.4 245 H1531.4 a8 8 0 0 1 8 8 V483 a8 8 0 0 1 -8 8 H1281.4 a8 8 0 0 1 -8 -8 V253 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
+  <path d="M1281.4 302 H1531.4 a8 8 0 0 1 8 8 V426 a8 8 0 0 1 -8 8 H1281.4 a8 8 0 0 1 -8 -8 V310 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
 
-  <path d="M1295.4 259 H1517.4 a8 8 0 0 1 8 8 V355 a8 8 0 0 1 -8 8 H1295.4 a8 8 0 0 1 -8 -8 V267 a8 8 0 0 1 8 -8 Z" fill="#191728" stroke="#4f5367"/>
-  <text x="1406.4" y="287.4" fill="#d9d9d9" text-anchor="middle">Webhook receiver</text>
-  <text x="1406.4" y="306.4" fill="#8b8b8b" text-anchor="middle">[External system]</text>
-  <text x="1406.4" y="325.4" fill="#d9d9d9" text-anchor="middle">Optional. Notified of new</text>
-  <text x="1406.4" y="344.4" fill="#d9d9d9" text-anchor="middle">messages</text>
-  <path d="M1295.4 373 H1517.4 a8 8 0 0 1 8 8 V469 a8 8 0 0 1 -8 8 H1295.4 a8 8 0 0 1 -8 -8 V381 a8 8 0 0 1 8 -8 Z" fill="#191728" stroke="#4f5367"/>
-  <text x="1406.4" y="401.4" fill="#d9d9d9" text-anchor="middle">SpamAssassin</text>
-  <text x="1406.4" y="420.4" fill="#8b8b8b" text-anchor="middle">[External system]</text>
-  <text x="1406.4" y="439.4" fill="#d9d9d9" text-anchor="middle">Optional. Scores messages</text>
-  <text x="1406.4" y="458.4" fill="#d9d9d9" text-anchor="middle">for spam checks</text>
+  <path d="M1295.4 316 H1517.4 a8 8 0 0 1 8 8 V412 a8 8 0 0 1 -8 8 H1295.4 a8 8 0 0 1 -8 -8 V324 a8 8 0 0 1 8 -8 Z" fill="#191728" stroke="#4f5367"/>
+  <text x="1406.4" y="344.4" fill="#d9d9d9" text-anchor="middle">Webhook receiver</text>
+  <text x="1406.4" y="363.4" fill="#8b8b8b" text-anchor="middle">[External system]</text>
+  <text x="1406.4" y="382.4" fill="#d9d9d9" text-anchor="middle">Optional. Notified of new</text>
+  <text x="1406.4" y="401.4" fill="#d9d9d9" text-anchor="middle">messages</text>
+  <path d="M1295.4 530 H1517.4 a8 8 0 0 1 8 8 V626 a8 8 0 0 1 -8 8 H1295.4 a8 8 0 0 1 -8 -8 V538 a8 8 0 0 1 8 -8 Z" fill="#191728" stroke="#4f5367"/>
+  <text x="1406.4" y="558.4" fill="#d9d9d9" text-anchor="middle">Roundcube</text>
+  <text x="1406.4" y="577.4" fill="#8b8b8b" text-anchor="middle">[Optional container]</text>
+  <text x="1406.4" y="596.4" fill="#d9d9d9" text-anchor="middle">Browses and sends mail</text>
+  <text x="1406.4" y="615.4" fill="#d9d9d9" text-anchor="middle">using account credentials</text>
   <path d="M 550.5 144 C 550.5 284, 159 157, 159 297" fill="none" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#arrow-5c5c7c)"/>
   <rect x="291.75" y="212.5" width="126" height="16" fill="#111111"/>
   <g font-size="12px">
@@ -91,14 +91,15 @@
   <text x="906" y="490.2" fill="#8b8b8b" text-anchor="middle">Reads and writes</text>
   <text x="906" y="506.2" fill="#8b8b8b" text-anchor="middle">[bbolt]</text>
   </g>
-  <path d="M 1063 360 C 1154.88 360, 1195.52 311, 1287.4 311" fill="none" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#arrow-5c5c7c)"/>
-  <rect x="1094.2" y="327.5" width="162" height="16" fill="#111111"/>
+  <path d="M 1063 360 C 1152.82 360, 1197.58 368, 1287.4 368" fill="none" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#arrow-5c5c7c)"/>
+  <rect x="1094.2" y="356" width="162" height="16" fill="#111111"/>
   <g font-size="12px">
-  <text x="1175.2" y="339.7" fill="#8b8b8b" text-anchor="middle">Posts webhooks [HTTP]</text>
+  <text x="1175.2" y="368.2" fill="#8b8b8b" text-anchor="middle">Posts webhooks [HTTP]</text>
   </g>
-  <path d="M 1063 376 C 1154.88 376, 1195.52 425, 1287.4 425" fill="none" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#arrow-5c5c7c)"/>
-  <rect x="1101.7" y="392.5" width="147" height="16" fill="#111111"/>
+  <path d="M 1287.4 582 C 1165.55 582, 1184.85 376, 1063 376" fill="none" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#arrow-5c5c7c)"/>
+  <rect x="1080.2" y="463" width="190" height="32" fill="#111111"/>
   <g font-size="12px">
-  <text x="1175.2" y="404.7" fill="#8b8b8b" text-anchor="middle">Checks spam [spamd]</text>
+  <text x="1175.2" y="475.2" fill="#8b8b8b" text-anchor="middle">Authenticates</text>
+  <text x="1175.2" y="491.2" fill="#8b8b8b" text-anchor="middle">[IMAPS and SMTP STARTTLS]</text>
   </g>
 </svg>

@@ -13,18 +13,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/emersion/go-imap"
-	"github.com/emersion/go-imap/client"
-	"github.com/emersion/go-imap/server"
+	"github.com/johlo/go-imap/v2"
+	client "github.com/johlo/go-imap/v2/imapclient"
 )
 
-func testMailbox(t *testing.T) (*mailboxBackend, *client.Client, http.Handler) {
+func testMailbox(t *testing.T) (*Account, *client.Client, http.Handler) {
 	t.Helper()
-	b, err := newMailboxBackend()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { b.Close() })
+	b := testStore(t, defaultConfig())
 	cert, err := tls.LoadX509KeyPair("../../testdata/tls/server.crt", "../../testdata/tls/server.key")
 	if err != nil {
 		t.Fatal(err)
@@ -37,41 +32,42 @@ func testMailbox(t *testing.T) (*mailboxBackend, *client.Client, http.Handler) {
 	if !roots.AppendCertsFromPEM(pem) {
 		t.Fatal("invalid test certificate")
 	}
-	srv := server.New(b)
-	srv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
-	l, err := tls.Listen("tcp", "127.0.0.1:0", srv.TLSConfig)
+	srv := newIMAPServer(b.service)
+	tlsConfig := &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
+	l, err := tls.Listen("tcp", "127.0.0.1:0", tlsConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve(l) }()
 	t.Cleanup(func() { srv.Close(); l.Close(); <-done })
-	c, err := client.DialTLS(l.Addr().String(), &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12})
+	c, err := client.DialTLS(l.Addr().String(), &client.Options{TLSConfig: &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.Timeout = 5 * time.Second
-	t.Cleanup(func() { c.Logout() })
+	t.Cleanup(func() { c.Close() })
 	return b, c, controlHandler(b)
 }
 
 func seedMessage(handler http.Handler, data string) *httptest.ResponseRecorder {
 	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/messages", strings.NewReader(data)))
+	req := httptest.NewRequest(http.MethodPost, defaultAPI+"/messages", strings.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	handler.ServeHTTP(w, req)
 	return w
 }
 
 func TestSeededMessageCanBeReadOverVerifiedTLS(t *testing.T) {
 	b, c, handler := testMailbox(t)
-	if err := c.Login(mailboxUsername, "wrong"); err == nil {
+	if err := c.Login(mailboxUsername, "wrong").Wait(); err == nil {
 		t.Fatal("accepted wrong mailbox credentials")
 	}
-	if err := c.Login(mailboxUsername, mailboxPassword); err != nil {
+	if err := c.Login(mailboxUsername, mailboxPassword).Wait(); err != nil {
 		t.Fatal(err)
 	}
 	response := seedMessage(handler, `{
-		"folder":"Sent", "from":"Clinic <clinic@example.test>",
-		"to":["Patient <patient@example.test>"], "cc":["copy@example.test"],
+		"folder":"Sent", "from":"Test User <user@example.test>",
+		"to":["Recipient <recipient@example.test>"], "cc":["copy@example.test"],
 		"bcc":["blind@example.test"], "subject":"Äldre brev", "message_id":"<history@example.test>",
 		"date":"2020-01-02T05:04:05+02:00", "internal_date":"2021-02-03T04:05:06Z",
 		"body":"BODY IS PRESENT IN THE TEST MAILBOX", "flags":["\\Seen"]
@@ -79,41 +75,44 @@ func TestSeededMessageCanBeReadOverVerifiedTLS(t *testing.T) {
 	if response.Code != http.StatusCreated {
 		t.Fatalf("seed: %d %s", response.Code, response.Body.String())
 	}
-	var result map[string]string
-	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || result["message_id"] != "history@example.test" {
+	var result messageDetail
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || result.MessageID != "history@example.test" {
 		t.Fatalf("response = %v, %v", result, err)
 	}
-	box, err := c.Select("Sent", true)
-	if err != nil || box.Messages != 1 || box.UidNext != 2 || box.UidValidity != b.user.boxes["Sent"].validity {
+	box, err := c.Select("Sent", &imap.SelectOptions{ReadOnly: true}).Wait()
+	if err != nil || box.NumMessages != 1 || box.UIDNext != 2 || box.UIDValidity != b.state.Folders["Sent"].Validity {
 		t.Fatalf("mailbox = %+v, %v", box, err)
 	}
-	criteria := imap.NewSearchCriteria()
-	criteria.Header.Add("TO", "patient@example.test")
-	uids, err := c.UidSearch(criteria)
+	criteria := new(imap.SearchCriteria)
+	criteria.Header = append(criteria.Header, imap.SearchCriteriaHeaderField{Key: "TO", Value: "recipient@example.test"})
+	resultSet, err := c.UIDSearch(criteria, nil).Wait()
+	var uids []imap.UID
+	if resultSet != nil {
+		uids = resultSet.AllUIDs()
+	}
 	if err != nil || len(uids) != 1 || uids[0] != 1 {
 		t.Fatalf("search = %v, %v", uids, err)
 	}
-	set := new(imap.SeqSet)
-	set.AddNum(uids...)
-	ch := make(chan *imap.Message, 1)
-	if err := c.UidFetch(set, []imap.FetchItem{imap.FetchEnvelope, imap.FetchInternalDate, imap.FetchFlags}, ch); err != nil {
-		t.Fatal(err)
+	messages, err := c.Fetch(imap.UIDSetNum(uids...), &imap.FetchOptions{Envelope: true, InternalDate: true, Flags: true}).Collect()
+	if err != nil || len(messages) != 1 {
+		t.Fatal("fetch failed", err)
 	}
-	msg := <-ch
+	msg := messages[0]
+
 	e := msg.Envelope
-	if e.Subject != "Äldre brev" || e.MessageId != "<history@example.test>" || e.From[0].Address() != mailboxUsername ||
-		e.To[0].Address() != "patient@example.test" || e.Cc[0].Address() != "copy@example.test" || e.Bcc[0].Address() != "blind@example.test" ||
+	if e.Subject != "Äldre brev" || e.MessageID != "history@example.test" || e.From[0].Addr() != mailboxUsername ||
+		e.To[0].Addr() != "recipient@example.test" || e.Cc[0].Addr() != "copy@example.test" || e.Bcc[0].Addr() != "blind@example.test" ||
 		!e.Date.Equal(time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)) || !msg.InternalDate.Equal(time.Date(2021, 2, 3, 4, 5, 6, 0, time.UTC)) {
 		t.Fatalf("unexpected message: %+v / %+v", msg, e)
 	}
-	if len(msg.Body) != 0 || len(msg.Flags) != 1 || msg.Flags[0] != imap.SeenFlag {
+	if len(msg.BodySection) != 0 || len(msg.Flags) != 1 || msg.Flags[0] != imap.FlagSeen {
 		t.Fatalf("metadata fetch changed flags or returned a body: %+v", msg)
 	}
 }
 
 func TestConcurrentFixtureWritesAndIMAPReads(t *testing.T) {
 	_, c, handler := testMailbox(t)
-	if err := c.Login(mailboxUsername, mailboxPassword); err != nil {
+	if err := c.Login(mailboxUsername, mailboxPassword).Wait(); err != nil {
 		t.Fatal(err)
 	}
 	httpServer := httptest.NewServer(handler)
@@ -121,7 +120,7 @@ func TestConcurrentFixtureWritesAndIMAPReads(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		for i := 0; i < 20; i++ {
-			response, err := http.Post(httpServer.URL+"/messages", "application/json", strings.NewReader(`{"from":"patient@example.test","to":["clinic@example.test"]}`))
+			response, err := http.Post(httpServer.URL+defaultAPI+"/messages", "application/json", strings.NewReader(`{"from":"recipient@example.test","to":["user@example.test"]}`))
 			if err != nil {
 				done <- err
 				return
@@ -136,24 +135,23 @@ func TestConcurrentFixtureWritesAndIMAPReads(t *testing.T) {
 		done <- nil
 	}()
 	for i := 0; i < 20; i++ {
-		if _, err := c.Select("INBOX", true); err != nil {
+		if _, err := c.Select("INBOX", &imap.SelectOptions{ReadOnly: true}).Wait(); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := c.UidSearch(imap.NewSearchCriteria()); err != nil {
+		if _, err := c.UIDSearch(new(imap.SearchCriteria), nil).Wait(); err != nil {
 			t.Fatal(err)
 		}
-		ch := make(chan *imap.Message, 20)
-		set := new(imap.SeqSet)
-		set.AddRange(1, 20)
-		if err := c.UidFetch(set, []imap.FetchItem{imap.FetchEnvelope, imap.FetchFlags}, ch); err != nil {
+		set := imap.UIDSet{{Start: 1, Stop: 20}}
+		if _, err := c.Fetch(set, &imap.FetchOptions{Envelope: true, Flags: true}).Collect(); err != nil {
 			t.Fatal(err)
 		}
+
 	}
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	box, err := c.Select("INBOX", true)
-	if err != nil || box.Messages != 20 || box.UidNext != 21 {
+	box, err := c.Select("INBOX", &imap.SelectOptions{ReadOnly: true}).Wait()
+	if err != nil || box.NumMessages != 20 || box.UIDNext != 21 {
 		t.Fatalf("mailbox after concurrent writes = %+v, %v", box, err)
 	}
 }
@@ -162,19 +160,20 @@ func TestBadFixturesAreRejectedWithoutAppending(t *testing.T) {
 	b, _, handler := testMailbox(t)
 	for _, data := range []string{
 		`{`,
-		`{"from":"patient@example.test","to":["clinic@example.test"],"folder":"missing"}`,
-		`{"from":"patient@example.test","to":["clinic@example.test"],"date":"not-a-date"}`,
-		`{"from":"patient@example.test","to":["clinic@example.test"],"subject":"bad\r\nX-Injected: yes"}`,
-		`{"from":"not-an-address","to":["clinic@example.test"]}`,
-		`{"from":"patient@example.test","to":["clinic@example.test"],"message_id":"<>"}`,
-		`{"from":"patient@example.test"}`,
+		`{"from":"recipient@example.test","to":["user@example.test"],"folder":"missing"}`,
+		`{"from":"recipient@example.test","to":["user@example.test"],"date":"not-a-date"}`,
+		`{"from":"recipient@example.test","to":["user@example.test"],"subject":"bad\r\nX-Injected: yes"}`,
+		`{"from":"not-an-address","to":["user@example.test"]}`,
+		`{"from":"recipient@example.test","to":["user@example.test"],"message_id":"<>"}`,
+		`{"from":"recipient@example.test"}`,
 	} {
 		if response := seedMessage(handler, data); response.Code != http.StatusBadRequest {
 			t.Fatalf("bad fixture returned %d: %s", response.Code, data)
 		}
 	}
-	status, err := b.user.boxes["INBOX"].Status([]imap.StatusItem{imap.StatusMessages})
-	if err != nil || status.Messages != 0 {
+	box, _ := b.user.GetMailbox("INBOX")
+	status, err := box.Status()
+	if err != nil || status.NumMessages != 0 {
 		t.Fatalf("bad fixtures changed mailbox: %+v, %v", status, err)
 	}
 }

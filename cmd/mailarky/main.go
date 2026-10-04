@@ -1,4 +1,4 @@
-// mail-sandbox is a headless SMTP and IMAP test mail server.
+// mailarky is a headless SMTP and IMAP test mail server.
 package main
 
 import (
@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/johlo/mail-sandbox/internal/sandbox"
+	"github.com/johlo/mailarky/internal/sandbox"
 )
 
 func main() {

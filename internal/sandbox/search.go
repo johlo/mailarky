@@ -3,15 +3,10 @@ package sandbox
 import (
 	"errors"
 	"fmt"
-	"net/mail"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 	"unicode"
-
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 )
 
 type messagePredicate func(*storedMessage) bool
@@ -51,7 +46,7 @@ func searchWords(query string) ([]string, error) {
 	}
 	return words, nil
 }
-func addressText(list []*mail.Address) string {
+func addressText(list []*address) string {
 	var words []string
 	for _, a := range list {
 		words = append(words, a.Name, a.Address)
@@ -96,17 +91,17 @@ func compileSearch(query, tz string) (messagePredicate, error) {
 			value = word
 			predicate = func(m *storedMessage) bool {
 				d := m.Detail
-				return contains(d.Subject+" "+d.Text+" "+d.HTML+" "+addressText(append(append(append(append([]*mail.Address{d.From}, d.To...), d.Cc...), d.Bcc...), d.ReplyTo...))+" "+d.MessageID, value)
+				return contains(d.Subject+" "+d.Text+" "+d.HTML+" "+addressText(append(append(append(append([]*address{d.From}, d.To...), d.Cc...), d.Bcc...), d.ReplyTo...))+" "+d.MessageID, value)
 			}
 		} else {
 			switch strings.ToLower(key) {
-			case "from", "to", "cc", "bcc", "reply-to", "addressed", "subject", "message-id", "tag", "username", "folder", "body":
+			case "from", "to", "cc", "bcc", "reply-to", "addressed", "subject", "message-id", "username", "folder", "body":
 				predicate = func(m *storedMessage) bool {
 					d := m.Detail
 					var text string
 					switch strings.ToLower(key) {
 					case "from":
-						text = addressText([]*mail.Address{d.From})
+						text = addressText([]*address{d.From})
 					case "to":
 						text = addressText(d.To)
 					case "cc":
@@ -116,18 +111,11 @@ func compileSearch(query, tz string) (messagePredicate, error) {
 					case "reply-to":
 						text = addressText(d.ReplyTo)
 					case "addressed":
-						text = addressText(append(append(append(append([]*mail.Address{d.From}, d.To...), d.Cc...), d.Bcc...), d.ReplyTo...))
+						text = addressText(append(append(append(append([]*address{d.From}, d.To...), d.Cc...), d.Bcc...), d.ReplyTo...))
 					case "subject":
 						text = d.Subject
 					case "message-id":
 						text = d.MessageID
-					case "tag":
-						for _, tag := range m.Tags {
-							if strings.EqualFold(tag, value) {
-								return true
-							}
-						}
-						return false
 					case "username":
 						text = m.Username
 					case "folder":
@@ -143,8 +131,6 @@ func compileSearch(query, tz string) (messagePredicate, error) {
 					predicate = func(m *storedMessage) bool { return hasFlag(m.Flags, "\\Seen") }
 				case "unread":
 					predicate = func(m *storedMessage) bool { return !hasFlag(m.Flags, "\\Seen") }
-				case "tagged":
-					predicate = func(m *storedMessage) bool { return len(m.Tags) > 0 }
 				default:
 					return nil, fmt.Errorf("unknown is: filter %q", value)
 				}
@@ -226,153 +212,4 @@ func parseSearchDate(value string, location *time.Location) (time.Time, error) {
 		}
 	}
 	return time.Time{}, errors.New("invalid search date")
-}
-
-var tagName = regexp.MustCompile(`^[a-zA-Z0-9_.@ -]{1,100}$`)
-
-func normalizeTags(tags []string) ([]string, error) {
-	out := []string{}
-	seen := map[string]bool{}
-	for _, tag := range tags {
-		tag = strings.TrimSpace(tag)
-		if !tagName.MatchString(tag) {
-			return nil, fmt.Errorf("invalid tag %q", tag)
-		}
-		if !seen[tag] {
-			out = append(out, tag)
-			seen[tag] = true
-		}
-	}
-	return out, nil
-}
-func (b *mailboxBackend) applyTags(m *storedMessage) error {
-	tags, err := normalizeTags(m.Tags)
-	if err != nil {
-		return err
-	}
-	c := b.config
-	automatic := []string{}
-	if !strings.Contains(c.TagsDisable, "x-tags") {
-		if header := headerText(m.Headers, "X-Tags"); header != "" {
-			automatic = append(automatic, strings.Split(header, ",")...)
-		}
-	}
-	if !strings.Contains(c.TagsDisable, "plus-addresses") {
-		for _, list := range [][]*mail.Address{{m.Detail.From}, m.Detail.To, m.Detail.Cc, m.Detail.Bcc} {
-			for _, address := range list {
-				local, _, _ := strings.Cut(address.Address, "@")
-				parts := strings.Split(local, "+")
-				automatic = append(automatic, parts[1:]...)
-			}
-		}
-	}
-	if c.TagsUsername && m.Username != "" {
-		automatic = append(automatic, m.Username)
-	}
-	for _, tag := range automatic {
-		tag = strings.TrimSpace(tag)
-		if c.TagsTitleCase {
-			tag = cases.Title(language.English).String(tag)
-		}
-		if tagName.MatchString(tag) {
-			tags = append(tags, tag)
-		}
-	}
-	for _, filter := range c.TagFilters {
-		predicate, err := compileTagSearch(filter.Match)
-		if err != nil {
-			return err
-		}
-		matches := predicate(m)
-		if matches {
-			tags = append(tags, strings.Split(filter.Tags, ",")...)
-		}
-	}
-	m.Tags, err = normalizeTags(tags)
-	return err
-}
-
-// Tag expressions allow shell-like quoting, including a quoted search phrase
-// inside a single-quoted match. No shell expansion or command execution occurs.
-func splitExpressions(input string) ([]string, error) {
-	var result []string
-	var current strings.Builder
-	var quote rune
-	escape := false
-	for _, ch := range input {
-		if escape {
-			current.WriteRune(ch)
-			escape = false
-			continue
-		}
-		if ch == '\\' {
-			escape = true
-			continue
-		}
-		if quote != 0 {
-			if ch == quote {
-				quote = 0
-			} else {
-				current.WriteRune(ch)
-			}
-			continue
-		}
-		if ch == '"' || ch == '\'' {
-			quote = ch
-			continue
-		}
-		if unicode.IsSpace(ch) {
-			if current.Len() > 0 {
-				result = append(result, current.String())
-				current.Reset()
-			}
-		} else {
-			current.WriteRune(ch)
-		}
-	}
-	if quote != 0 || escape {
-		return nil, errors.New("unterminated tag expression")
-	}
-	if current.Len() > 0 {
-		result = append(result, current.String())
-	}
-	return result, nil
-}
-func compileTagSearch(query string) (messagePredicate, error) {
-	words, err := searchWords(query)
-	if err != nil {
-		return nil, err
-	}
-	predicates := []messagePredicate{}
-	for _, word := range words {
-		value := word
-		negative := strings.HasPrefix(value, "-") || strings.HasPrefix(value, "!")
-		if negative {
-			value = value[1:]
-		}
-		key, _, hasFilter := strings.Cut(value, ":")
-		if hasFilter && containsString([]string{"from", "to", "cc", "bcc", "reply-to", "addressed", "subject", "message-id", "username", "folder", "body", "is", "has", "larger", "smaller", "before", "after", "tag"}, key) {
-			p, err := compileSearch(strconv.Quote(word), "")
-			if err != nil {
-				return nil, err
-			}
-			predicates = append(predicates, p)
-		} else {
-			predicates = append(predicates, func(m *storedMessage) bool {
-				matched := contains(string(m.Raw), value)
-				if negative {
-					return !matched
-				}
-				return matched
-			})
-		}
-	}
-	return func(m *storedMessage) bool {
-		for _, p := range predicates {
-			if !p(m) {
-				return false
-			}
-		}
-		return true
-	}, nil
 }
