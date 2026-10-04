@@ -129,6 +129,8 @@ jobs:
           for architecture in amd64 arm64; do
             actual=$(docker run --rm --platform "linux/$architecture" "$IMAGE@$DIGEST" --version)
             test "$actual" = "mailarky $RELEASE_TAG ${REVISION:0:12}"
+            # The local image store holds one platform per digest.
+            docker image rm "$IMAGE@$DIGEST"
           done
 
       - name: Publish GitHub release
