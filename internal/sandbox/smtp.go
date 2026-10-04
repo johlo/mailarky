@@ -10,6 +10,7 @@ import (
 	"net/mail"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/emersion/go-sasl"
@@ -63,6 +64,8 @@ type smtpDelivery struct {
 	recipients []string
 }
 type smtpSession struct {
+	authMu        sync.Mutex
+	closed        bool
 	backend       *smtpBackend
 	conn          *smtp.Conn
 	from          string
@@ -76,9 +79,20 @@ type smtpSession struct {
 func (b *smtpBackend) NewSession(c *smtp.Conn) (smtp.Session, error) {
 	return &smtpSession{backend: b, conn: c}, nil
 }
-func (s *smtpSession) Reset()                   { s.from = ""; s.recipients = nil; s.deliveries = nil; s.completed = nil }
-func (s *smtpSession) Logout() error            { return nil }
-func (s *smtpSession) AuthMechanisms() []string { return []string{"PLAIN", "LOGIN"} }
+func (s *smtpSession) Reset() { s.from = ""; s.recipients = nil; s.deliveries = nil; s.completed = nil }
+func (s *smtpSession) Logout() error {
+	s.authMu.Lock()
+	defer s.authMu.Unlock()
+	if s.closed {
+		return nil
+	}
+	s.closed = true
+	if s.authenticated != nil {
+		s.authenticated.releaseConnection("smtp")
+	}
+	return nil
+}
+func (s *smtpSession) AuthMechanisms() []string { return []string{"PLAIN", "LOGIN", "XOAUTH2"} }
 func (s *smtpSession) Auth(mechanism string) (sasl.Server, error) {
 	authenticate := func(username, password string) error {
 		if err := s.authenticationFault(username); err != nil {
@@ -88,11 +102,20 @@ func (s *smtpSession) Auth(mechanism string) (sasl.Server, error) {
 		if account == nil {
 			return smtp.ErrAuthFailed
 		}
-		s.username = username
-		s.authenticated = account
-		return nil
+		return s.bindAccount(account)
 	}
 	switch mechanism {
+	case "XOAUTH2":
+		return &xoauth2Server{invalid: smtp.ErrAuthFailed, authenticate: func(username, token string) error {
+			if err := s.authenticationFault(username); err != nil {
+				return err
+			}
+			account, status := s.backend.service.authenticateToken(username, token)
+			if account == nil {
+				return oauthAuthError("smtp", status)
+			}
+			return s.bindAccount(account)
+		}}, nil
 	case "PLAIN":
 		return sasl.NewPlainServer(func(identity, username, password string) error {
 			if identity != "" && identity != username {
@@ -105,6 +128,21 @@ func (s *smtpSession) Auth(mechanism string) (sasl.Server, error) {
 	default:
 		return nil, smtp.ErrAuthUnknownMechanism
 	}
+}
+
+func (s *smtpSession) bindAccount(account *Account) error {
+	s.authMu.Lock()
+	defer s.authMu.Unlock()
+	if s.closed {
+		return smtp.ErrAuthFailed
+	}
+	if err := account.acquireConnection("smtp"); errors.Is(err, errAccountClosed) {
+		return smtp.ErrAuthFailed
+	} else if err != nil {
+		return &smtp.SMTPError{Code: 454, EnhancedCode: smtp.EnhancedCode{4, 7, 0}, Message: "Account SMTP connection limit reached"}
+	}
+	s.username, s.authenticated = account.identity.Username, account
+	return nil
 }
 
 type loginServer struct {
@@ -225,12 +263,35 @@ func (s *smtpSession) Data(reader io.Reader) error {
 		}
 	}
 	// SMTP has one final DATA result: reject before any delivery on content faults.
+	// Preflight known quota failures before fanout. Each store rechecks under its
+	// lock, since HTTP/IMAP writes may race this check.
+	for _, delivery := range s.deliveries {
+		if err := delivery.account.preflightAppend(len(raw), detail.MessageID); err != nil {
+			return &smtp.SMTPError{Code: 452, EnhancedCode: smtp.EnhancedCode{4, 2, 2}, Message: err.Error()}
+		}
+	}
+	// Only the authenticated sender spends sending capacity. Anonymous mail has
+	// no sender account, and receiving mail must not consume a sending limit.
+	release := func() {}
+	if s.authenticated != nil {
+		rollback, ok := s.authenticated.reserveSend(time.Now())
+		if !ok {
+			return &smtp.SMTPError{Code: 451, EnhancedCode: smtp.EnhancedCode{4, 7, 0}, Message: "Account sending rate limit exceeded; retry later"}
+		}
+		release = rollback
+	}
 	// Account databases commit independently. A storage error can leave earlier
 	// copies committed; the 451 retry may deliver duplicates to those accounts.
+	// An authenticated submission has a single delivery, so a failure here means
+	// nothing was stored and its reservation is returned.
 	for _, delivery := range s.deliveries {
 		a := delivery.account
 		if _, err := a.append(raw, appendOptions{Folder: s.backend.service.config.SMTPFolder, Date: now, From: s.from, To: delivery.recipients, Username: s.username, Notify: true, Parsed: parsed}); err != nil {
+			release()
 			a.rejected.Add(1)
+			if errors.Is(err, errQuota) {
+				return &smtp.SMTPError{Code: 452, EnhancedCode: smtp.EnhancedCode{4, 2, 2}, Message: err.Error()}
+			}
 			return &smtp.SMTPError{Code: 451, Message: "Message could not be stored"}
 		}
 		a.accepted.Add(1)
@@ -250,7 +311,7 @@ func newSMTPServer(service *Service) (*smtp.Server, error) {
 	srv.Addr = c.SMTPAddress
 	srv.Domain = "mailarky.test"
 	srv.MaxMessageBytes = c.MaxSize
-	srv.MaxRecipients = 1000
+	srv.MaxRecipients = c.SMTPMaxRecipients
 	srv.ReadTimeout = time.Minute
 	srv.WriteTimeout = time.Minute
 	srv.AllowInsecureAuth = c.SMTPAllowInsecureAuth

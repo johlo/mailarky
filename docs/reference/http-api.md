@@ -19,11 +19,17 @@ all accounts, not for account-level access control.
 | DELETE | `/api/v1/accounts/{account}` | Delete account and storage; 204 |
 | GET | `/api/v1/info` | Service name, protocols, account count |
 
-Create with optional `name`, `username`, `password`, and `recipients` fields.
+Create with optional `name`, `username`, `password`, `recipients`, `limits`, and
+`oauth_tokens` fields.
 Omitted credentials and recipient addresses are generated. Names, usernames,
 and explicitly registered recipients must be unique. Recipients are exact,
 case-insensitive envelope addresses used only for anonymous SMTP routing.
 Passwords have a 72-byte limit. `default` cannot be deleted.
+
+`limits` accepts `smtp_connections`, `imap_connections`, `send_messages`,
+`send_window`, `quota_messages`, and `quota_bytes`. Descriptions include the
+effective `limits`. See [enforced limits](configuration.md#enforced-limits)
+for defaults and rejection behavior. Limits are fixed when the account is created.
 
 ## Account resources
 
@@ -44,10 +50,36 @@ Paths below are relative to `/api/v1/accounts/{account}`.
 | GET | `/folders` | Name, message count, UIDNEXT, UIDVALIDITY |
 | POST | `/folders` | Create with `{"name":"History"}`; 201 |
 | GET | `/events` | WebSocket stream of `{"type":...,"data":...}` |
+| PUT | `/oauth-tokens` | Replace configured test tokens; `{"tokens":[...]}`; 204 |
 
 MIME header keys retain their original casing. Attachment metadata contains
 `part_id`, `filename`, `content_type`, `content_id`, and `size`. Payloads are
 decoded from raw MIME when requested. GET endpoints never mark messages read.
+
+### Test OAuth tokens
+
+Account creation accepts an `oauth_tokens` array. PUT `/oauth-tokens` accepts
+`{"tokens":[...]}` and replaces the full set; `{"tokens":[]}` revokes all.
+This endpoint also works for `default`. Each array entry has required `token`
+(1–1,024 printable ASCII bytes without spaces), optional `status` (`valid`,
+`expired`, or `rejected`; default `valid`), and optional `expires_at` (RFC3339).
+There can be at most 100 unique token values per account.
+
+Tokens are scoped to the exact account username. Valid tokens fail once their
+expiry is reached. Unknown tokens fail as rejected. Token hashes, statuses,
+and expiry are persisted with account storage; plaintext token values are
+never returned or persisted. Replacement is atomic and affects future
+authentication only, not sessions already authenticated. A token may have a
+different state in a different account.
+
+Both protocols advertise XOAUTH2 where authentication is available. A valid
+token follows the same ownership, connection-limit, and account-fault paths as
+password authentication. A failed token gets a base64 JSON `401` bearer
+challenge, then SMTP `535 5.7.8` or IMAP `NO [AUTHENTICATIONFAILED]` after the
+client's empty response. Expired tokens use IMAP `NO [EXPIRED]`. Malformed
+XOAUTH2 payloads fail immediately. Authentication fault rules can override
+these replies. There is no OAuth authorization/token endpoint or provider JWT
+validation; see [OAuth testing](../how-to/integrate-with-application.md#test-oauth-authentication).
 
 ### Message creation
 
@@ -75,6 +107,8 @@ A Message-ID is generated when omitted. Unknown JSON fields are rejected.
 Use `Content-Type: message/rfc822` with the `.eml` bytes to import arbitrary MIME.
 `?folder=Sent` selects the folder; the default is `INBOX`. Both formats return
 message detail with `id`, `message_id`, `folder`, and `uid`.
+Exceeding the account's storage quota returns HTTP 507 without storing or
+evicting any message.
 
 ### Search and deletion
 
@@ -102,15 +136,18 @@ at `/api/v1/faults`. These are independent registries with identical operations.
 | --- | --- | --- |
 | GET | empty | Rules in creation order |
 | POST | empty | Create; 201 |
-| GET | `/{name}` | Rule including hit count |
-| PUT | `/{name}` | Create or replace definition, preserving existing hits |
+| GET | `/{name}` | Rule including `matches` and `hits` counters |
+| PUT | `/{name}` | Create or replace definition, preserving counters and sequence position |
 | PATCH | `/{name}` | Set `{"enabled":false}` or `true` |
 | DELETE | `/{name}` | Remove; 204 |
 
 A rule requires `name`, `trigger`, and `action`. `enabled` defaults to true.
 `filter` is optional. `max_hits: 0` means unlimited, `probability` defaults to 1,
 and `expires_at` is an optional RFC3339 timestamp. Hits are server-owned and
-claimed atomically before actions execute. Unknown action options are rejected.
+claimed atomically before actions execute. `matches` counts eligible events
+before applying probability or sequence selection. `sequence` contains
+`steps` (1–1,024 `pass`/`apply` strings) and optional `repeat` (default false).
+It cannot be combined with probability. Unknown action options are rejected.
 See the [fault guide](../how-to/fault-injection.md) and [OpenAPI](../../openapi.yaml).
 
 ## Notifications and metrics

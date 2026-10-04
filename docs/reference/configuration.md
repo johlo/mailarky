@@ -98,6 +98,57 @@ Webhooks use one worker per account, a bounded queue, and up to three attempts.
 `label` supplies the `Mailarky-Label` header. Webhook or WebSocket delivery is
 observability, not durable message delivery.
 
+## Enforced limits
+
+All limits default to unlimited (`0`), except the SMTP recipient limit (1,000).
+These settings reject excess work. `max_messages` and `max_age` above are
+retention policies that delete old messages; they do not enforce quotas.
+
+| Environment variable | Flag | YAML key | Default |
+| --- | --- | --- | --- |
+| `MAILARKY_SMTP_MAX_RECIPIENTS` | `--smtp-max-recipients` | `smtp_max_recipients` | `1000` |
+| `MAILARKY_ACCOUNT_SMTP_CONNECTIONS` | `--account-smtp-connections` | `account_limits.smtp_connections` | `0` |
+| `MAILARKY_ACCOUNT_IMAP_CONNECTIONS` | `--account-imap-connections` | `account_limits.imap_connections` | `0` |
+| `MAILARKY_ACCOUNT_SEND_MESSAGES` | `--account-send-messages` | `account_limits.send_messages` | `0` |
+| `MAILARKY_ACCOUNT_SEND_WINDOW` | `--account-send-window` | `account_limits.send_window` | empty |
+| `MAILARKY_ACCOUNT_QUOTA_MESSAGES` | `--account-quota-messages` | `account_limits.quota_messages` | `0` |
+| `MAILARKY_ACCOUNT_QUOTA_BYTES` | `--account-quota-bytes` | `account_limits.quota_bytes` | `0` |
+
+Compose passes these variables to the service when they are set on the host. YAML uses a nested
+`account_limits` mapping. The defaults apply to the default account and newly
+created accounts. `POST /api/v1/accounts` can supply a `limits` object that
+replaces the entire set of account defaults; omitted fields in that object
+are unlimited. `{ "limits": {} }` creates an unlimited account. Limits on
+runtime accounts are immutable and persisted with their account metadata.
+Connection counts and sending windows reset on restart.
+
+| Limit | Scope and response |
+| --- | --- |
+| `smtp_max_recipients` | Accepted recipients per transaction across all accounts; extra RCPT gets `452 4.5.3`. Previously accepted recipients can still receive DATA. EHLO advertises `LIMITS RCPTMAX`. |
+| `smtp_connections` | Authenticated sessions for one account; excess AUTH gets `454 4.7.0`. Anonymous sessions are not counted. |
+| `imap_connections` | Authenticated sessions for one account, including IDLE; excess LOGIN/AUTHENTICATE gets `NO [LIMIT]`. |
+| `send_messages` / `send_window` | Successful authenticated SMTP submissions per account in a fixed window starting with the first admission. Excess DATA/BDAT LAST gets `451 4.7.0`. A nonzero count requires a positive Go duration such as `1s` or `1m`. |
+| `quota_messages` / `quota_bytes` | Total stored messages / raw MIME bytes across all folders. SMTP gets `452 4.2.2`; IMAP APPEND/COPY gets `NO [OVERQUOTA]`; HTTP seeding gets `507` with a JSON error. |
+
+Closing or logging out releases a connection slot. Connection limits are
+independent for SMTP and IMAP. Sending windows reserve capacity atomically
+across concurrent submissions; failed storage releases unused reservations.
+Only the authenticated sender's account consumes a submission, regardless of
+recipient count. Anonymous SMTP is not rate-limited, including mail routed into
+a limited account: receiving mail never consumes sending capacity. Accepted
+duplicate submissions count even if duplicate Message-ID suppression avoids
+another stored copy. HTTP seeding and IMAP APPEND/COPY do not consume SMTP
+sending capacity. Fixed windows can admit
+bursts around a window boundary; this is not a sliding-window limiter.
+
+Quota checks include copies and happen before retention. A full account never
+evicts fixtures to fit an attempted insertion. Deletion/expunge frees quota;
+flag changes and reads remain available. Quotas are enforced without advertising
+the IMAP QUOTA extension. Fan-out preflights known quota failures before storing
+any copy. Account databases still commit independently, so a racing
+HTTP/IMAP insertion or storage error can cause a partial fan-out and duplicates
+on retry.
+
 ## Sendmail helper
 
 `mailarky sendmail` accepts `-f`, `-t`, `-i`, `-oi`, `-S host:port`, and `-ca file`.

@@ -22,12 +22,13 @@ import (
 // Accounts have disjoint stores, UID spaces, fault registries and notification
 // queues. Only routing and provisioning metadata is shared.
 type mailboxAccount struct {
-	ID           string    `json:"id"`
-	Name         string    `json:"name"`
-	Username     string    `json:"username"`
-	Recipients   []string  `json:"recipients"`
-	Created      time.Time `json:"created"`
-	PasswordHash string    `json:"password_hash,omitempty"`
+	ID           string        `json:"id"`
+	Name         string        `json:"name"`
+	Username     string        `json:"username"`
+	Recipients   []string      `json:"recipients"`
+	Created      time.Time     `json:"created"`
+	PasswordHash string        `json:"password_hash,omitempty"`
+	Limits       accountLimits `json:"limits"`
 }
 
 // Service owns global configuration, routing, HTTP credentials and server faults.
@@ -55,22 +56,30 @@ type Account struct {
 	stop                                               func()
 	afterAppend                                        func(*storedMessage)
 	started                                            time.Time
+	resourceMu                                         sync.Mutex
+	oauthMu                                            sync.RWMutex
+	oauthTokens                                        []oauthToken
+	smtpConnections, imapConnections, sentInWindow     int
+	sendWindow                                         time.Time
 	accepted, rejected, ignored, deleted, acceptedSize atomic.Uint64
 }
 type mailboxCreation struct {
-	Name       string   `json:"name"`
-	Username   string   `json:"username"`
-	Password   string   `json:"password"`
-	Recipients []string `json:"recipients"`
+	Name        string              `json:"name"`
+	Username    string              `json:"username"`
+	Password    string              `json:"password"`
+	Recipients  []string            `json:"recipients"`
+	Limits      *accountLimits      `json:"limits,omitempty"`
+	OAuthTokens []oauthTokenRequest `json:"oauth_tokens,omitempty"`
 }
 type mailboxDescription struct {
-	ID         string    `json:"id"`
-	Name       string    `json:"name"`
-	Username   string    `json:"username"`
-	Recipients []string  `json:"recipients"`
-	Created    time.Time `json:"created"`
-	APIBase    string    `json:"api_base"`
-	Password   string    `json:"password,omitempty"`
+	ID         string        `json:"id"`
+	Name       string        `json:"name"`
+	Username   string        `json:"username"`
+	Recipients []string      `json:"recipients"`
+	Created    time.Time     `json:"created"`
+	APIBase    string        `json:"api_base"`
+	Password   string        `json:"password,omitempty"`
+	Limits     accountLimits `json:"limits"`
 }
 
 func openService(ctx context.Context, c configuration) (*Service, error) {
@@ -87,7 +96,7 @@ func openService(ctx context.Context, c configuration) (*Service, error) {
 		cancel()
 		return nil, err
 	}
-	a, err := h.openAccount(mailboxAccount{ID: defaultAccountID, Name: defaultAccountID, Username: c.Username, Recipients: []string{}, Created: time.Now().UTC(), PasswordHash: string(hash)})
+	a, err := h.openAccount(mailboxAccount{ID: defaultAccountID, Name: defaultAccountID, Username: c.Username, Recipients: []string{}, Created: time.Now().UTC(), PasswordHash: string(hash), Limits: c.AccountLimits})
 	if err != nil {
 		cancel()
 		return nil, err
@@ -153,11 +162,15 @@ func (h *Service) openAccount(identity mailboxAccount) (*Account, error) {
 	} else if dump != "" {
 		dump = filepath.Join(dump, identity.ID)
 	}
-	store, err := openStore(storeOptions{MailboxID: identity.ID, Database: path, SMTPFolder: c.SMTPFolder, MaxMessages: c.MaxMessages, MaxAge: c.MaxAge, MaxSize: c.MaxSize, IgnoreDuplicates: c.IgnoreDuplicates, DumpPath: dump})
+	store, err := openStore(storeOptions{MailboxID: identity.ID, Database: path, SMTPFolder: c.SMTPFolder, MaxMessages: c.MaxMessages, MaxAge: c.MaxAge, MaxSize: c.MaxSize, IgnoreDuplicates: c.IgnoreDuplicates, DumpPath: dump, Limits: identity.Limits})
 	if err != nil {
 		return nil, err
 	}
 	a := &Account{Store: store, service: h, identity: identity, faults: newFaultRegistry(), notifier: newEventHub(), started: time.Now()}
+	if err := a.loadOAuthTokens(); err != nil {
+		store.Close()
+		return nil, err
+	}
 	a.user = &mailboxUser{store: a}
 	store.onChange = a.changed
 	a.stop = a.startWorkers(h.ctx)
@@ -219,9 +232,20 @@ func (h *Service) register(m *Account) {
 	}
 }
 func (h *Service) description(a mailboxAccount) mailboxDescription {
-	return mailboxDescription{ID: a.ID, Name: a.Name, Username: a.Username, Recipients: append([]string{}, a.Recipients...), Created: a.Created, APIBase: h.config.Webroot + "/api/v1/accounts/" + a.ID}
+	return mailboxDescription{ID: a.ID, Name: a.Name, Username: a.Username, Recipients: append([]string{}, a.Recipients...), Created: a.Created, APIBase: h.config.Webroot + "/api/v1/accounts/" + a.ID, Limits: a.Limits}
 }
 func (h *Service) create(req mailboxCreation) (mailboxDescription, error) {
+	tokens, err := prepareOAuthTokens(req.OAuthTokens)
+	if err != nil {
+		return mailboxDescription{}, err
+	}
+	limits := h.config.AccountLimits
+	if req.Limits != nil {
+		limits = *req.Limits
+	}
+	if err := limits.validate(); err != nil {
+		return mailboxDescription{}, err
+	}
 	id := uuid.NewString()
 	if req.Name == "" {
 		req.Name = id
@@ -265,7 +289,7 @@ func (h *Service) create(req mailboxCreation) (mailboxDescription, error) {
 	if err != nil {
 		return mailboxDescription{}, err
 	}
-	account := mailboxAccount{ID: id, Name: req.Name, Username: req.Username, Recipients: recipients, Created: time.Now().UTC(), PasswordHash: string(hash)}
+	account := mailboxAccount{ID: id, Name: req.Name, Username: req.Username, Recipients: recipients, Created: time.Now().UTC(), PasswordHash: string(hash), Limits: limits}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.closed {
@@ -276,6 +300,11 @@ func (h *Service) create(req mailboxCreation) (mailboxDescription, error) {
 	}
 	m, err := h.openAccount(account)
 	if err != nil {
+		return mailboxDescription{}, err
+	}
+	if err := m.setOAuthTokens(tokens); err != nil {
+		m.Close()
+		os.Remove(h.databasePath(id))
 		return mailboxDescription{}, err
 	}
 	if db := h.entries[defaultAccountID].db; db != nil {

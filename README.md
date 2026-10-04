@@ -108,13 +108,31 @@ Every fault has a **trigger**, optional **filter**, and typed **action**:
 POST this to `/api/v1/accounts/ACCOUNT_ID/faults`. Server-wide faults use a
 separate registry at `/api/v1/faults`. Rules support delays, disconnects,
 rejections, malformed replies, capability changes, lost acknowledgements,
-UIDVALIDITY resets, and selected IMAP content changes. Inspect hit counts,
-disable rules, or bound them by probability, expiry, and maximum hits.
-See [inject failures](docs/how-to/fault-injection.md).
+UIDVALIDITY resets, selected IMAP content changes, timed IDLE disconnects, and
+dropped IDLE notifications. A `sequence` such as `["pass","pass","apply"]`
+fails only the third matching event, and `"repeat":true` repeats the pattern.
+Inspect match and hit counts, disable rules, or bound them by expiry, maximum
+hits, or probability. See [inject failures](docs/how-to/fault-injection.md).
 
 For **latency, bandwidth limits, TCP resets, and connection outages**, combine
 Mailarky with [Toxiproxy](https://github.com/Shopify/toxiproxy). Keep the HTTP
 control API directly accessible while SMTP or IMAP connections are failing.
+
+## Enforced limits
+
+Limits reject excess work the way a provider would, without any fault rules:
+recipients per transaction, authenticated connections per account, sending rate
+for authenticated SMTP, and per-account storage quotas. Use them to test how a
+client adapts its batching, concurrency, and retries. See
+[enforced limits](docs/reference/configuration.md#enforced-limits).
+
+## Test OAuth
+
+Give an account test tokens and authenticate with **XOAUTH2** on SMTP and IMAP,
+as with Gmail or Microsoft 365. Tokens can be valid, expired, or rejected, and
+can be replaced while the application runs to test refresh. Mailarky doesn't
+issue tokens; stub your application's token endpoint separately. See
+[test OAuth authentication](docs/how-to/integrate-with-application.md#test-oauth-authentication).
 
 ## Focus and boundaries
 
@@ -124,8 +142,8 @@ control API directly accessible while SMTP or IMAP connections are failing.
   produce EXISTS, EXPUNGE, and flag updates at safe command boundaries and during IDLE.
 - Storage is in memory by default. Optional bbolt persistence preserves accounts,
   credentials, messages, and UID identity. Fault rules are ephemeral.
-- Retention is unlimited by default. Optional limits apply independently to each
-  account, across its folders.
+- Retention is unlimited by default. Optional retention prunes old mail; storage
+  quotas reject new mail without evicting fixtures. Both span an account's folders.
 - Mail is captured locally. There is no relay, forwarding, POP3, or built-in webmail UI.
   Roundcube provides browsing over the real mail protocols.
 - SMTP has one final result per transaction. A content fault rejects a fan-out

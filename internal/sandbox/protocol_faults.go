@@ -18,6 +18,16 @@ func validateFault(t faultRule, scope string) error {
 	if t.Probability != nil && (math.IsNaN(*t.Probability) || *t.Probability < 0 || *t.Probability > 1) {
 		return errors.New("probability must be between 0 and 1")
 	}
+	if t.Sequence != nil {
+		if t.Probability != nil || len(t.Sequence.Steps) == 0 || len(t.Sequence.Steps) > 1024 {
+			return errors.New("sequence requires 1-1024 steps and cannot be combined with probability")
+		}
+		for _, step := range t.Sequence.Steps {
+			if step != "pass" && step != "apply" {
+				return errors.New("sequence steps must be pass or apply")
+			}
+		}
+	}
 	tr, f := t.Trigger, t.Filter
 	var commands []string
 	switch tr.Protocol {
@@ -31,8 +41,23 @@ func validateFault(t faultRule, scope string) error {
 	if !slices.Contains(commands, tr.Command) {
 		return errors.New("trigger.command must be a supported uppercase command")
 	}
-	if !slices.Contains([]string{"before", "content", "after"}, tr.Phase) {
-		return errors.New("trigger.phase must be before, content or after")
+	if !slices.Contains([]string{"before", "content", "after", "active", "notification"}, tr.Phase) {
+		return errors.New("trigger.phase must be before, content, after, active or notification")
+	}
+	if tr.Phase == "active" || tr.Phase == "notification" {
+		if tr.Protocol != "imap" || tr.Command != "IDLE" {
+			return errors.New("active and notification phases require IMAP IDLE")
+		}
+		if tr.Phase == "active" {
+			if _, ok := t.Action.Parameters.(*disconnectAction); !ok {
+				return errors.New("IDLE active phase requires disconnect")
+			}
+		} else if _, ok := t.Action.Parameters.(*dropAction); !ok {
+			return errors.New("IDLE notification phase requires drop")
+		}
+	}
+	if f.Notification != "" && (tr.Phase != "notification" || !slices.Contains([]string{"EXISTS", "EXPUNGE", "FLAGS"}, f.Notification)) {
+		return errors.New("notification filter requires IDLE notification phase and EXISTS, EXPUNGE or FLAGS")
 	}
 	if scope != "server" && scope != "account" {
 		return errors.New("invalid registry scope")
@@ -98,6 +123,10 @@ func validateFault(t faultRule, scope string) error {
 	}
 	singleLine := func(s string) bool { return len(s) <= 1000 && !strings.ContainsAny(s, "\r\n\x00") }
 	switch a := t.Action.Parameters.(type) {
+	case *dropAction:
+		if tr.Phase != "notification" {
+			return errors.New("drop requires IDLE notification phase")
+		}
 	case *rejectAction:
 		if !singleLine(a.Message) {
 			return errors.New("rejection message must be a single line of at most 1000 bytes")
@@ -128,6 +157,9 @@ func validateFault(t faultRule, scope string) error {
 			return errors.New("delay_ms must be between 0 and 30000")
 		}
 	case *disconnectAction:
+		if a.AfterMS != nil && (tr.Phase != "active" || *a.AfterMS < 0 || *a.AfterMS > 86400000) {
+			return errors.New("after_ms requires IDLE active phase and a value from 0 to 86400000")
+		}
 		if !singleLine(a.Message) {
 			return errors.New("disconnect message must be a single line of at most 1000 bytes")
 		}
