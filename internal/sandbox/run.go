@@ -10,8 +10,6 @@ import (
 	"net/http"
 	"time"
 	_ "time/tzdata"
-
-	"github.com/emersion/go-imap/server"
 )
 
 func run(ctx context.Context, c configuration) error {
@@ -19,26 +17,21 @@ func run(ctx context.Context, c configuration) error {
 	if err != nil {
 		return err
 	}
-	manager, err := openMailboxManager(ctx, c)
+	manager, err := openService(ctx, c)
 	if err != nil {
 		return err
 	}
 	defer manager.Close()
-	b := manager.lookup("default").store
-	api, err := newAPI(b)
-	if err != nil {
-		return err
-	}
-	api.manager = manager
-	smtpServer, err := newSMTPServer(b, manager)
+	api := newAPI(manager)
+	smtpServer, err := newSMTPServer(manager)
 	if err != nil {
 		return err
 	}
 	defer smtpServer.Close()
-	imapServer := server.New(manager)
-	imapServer.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
+	imapServer := newIMAPServer(manager)
+	imapTLSConfig := &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
 	defer imapServer.Close()
-	imapListener, err := tls.Listen("tcp", c.IMAPAddress, imapServer.TLSConfig)
+	imapListener, err := tls.Listen("tcp", c.IMAPAddress, imapTLSConfig)
 	if err != nil {
 		return err
 	}
@@ -87,7 +80,7 @@ func Run(ctx context.Context, args []string) error {
 		return sendmail(args[1:])
 	}
 	if len(args) > 0 && (args[0] == "--version" || args[0] == "version") {
-		log.Print("mail-sandbox 2 (SMTP, IMAP, HTTP)")
+		log.Print("mailarky 2 (SMTP, IMAP, HTTP)")
 		return nil
 	}
 	c, err := loadConfig(args)

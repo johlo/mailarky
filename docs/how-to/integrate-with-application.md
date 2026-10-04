@@ -1,33 +1,32 @@
 # Connect an application
 
-| Setting | Value |
-| --- | --- |
-| SMTP | `mail-sandbox:1025` in Compose, `localhost:1025` from the host. No authentication, no TLS. |
-| IMAP | `mail-sandbox:1993` / `localhost:1993`, implicit TLS |
-| IMAP login | `clinic@example.test` / `local-imap-only` |
-| IMAP trust | Add [`testdata/tls/server.crt`](../../testdata/tls/server.crt) to the client's trusted roots |
-| HTTP API | `http://mail-sandbox:8026` / `http://localhost:8026` |
+Start the [Compose stack](run-and-test.md), create an account, and configure
+both mail clients with the credentials returned by `POST /api/v1/accounts`.
 
-SMTP deliveries are stored in `Sent`. If your application expects them in
-`INBOX`, set `MAIL_SANDBOX_SMTP_FOLDER=INBOX` on the sandbox.
+| Setting | Application on host | Application in the same Compose network |
+| --- | --- | --- |
+| SMTP host | `localhost` | `mailarky` |
+| SMTP port | `1025` or `MAILARKY_SMTP_PORT` | `1025` |
+| SMTP security | STARTTLS with the bundled CA trusted | STARTTLS with the bundled CA trusted |
+| IMAP host | `localhost` | `mailarky` |
+| IMAP port | `1993` or `MAILARKY_IMAP_PORT` | `1993` |
+| IMAP security | Implicit TLS | Implicit TLS |
+| HTTP base | `http://localhost:8026/api/v1` | `http://mailarky:8026/api/v1` |
 
-In the IMAP client, use UID SEARCH and UID FETCH and track UIDVALIDITY. The
-server does not push updates, so poll. See [IMAP behavior](../reference/imap-behavior.md).
+Trust `testdata/tls/server.crt`; it covers `localhost`, `mailarky`, and
+`127.0.0.1`. The private key is an intentional public test fixture. Supply your
+own certificate when using a different hostname.
 
-## Parallel tests
+Authenticate SMTP even if authentication is optional: AUTH is what ties
+outgoing customer mail to the test account. The recipients can be arbitrary
+addresses, including the same addresses used by other tests. Mail is stored in
+that account's `Sent`; no external delivery occurs. Seed incoming history in
+`INBOX` or a chosen folder via HTTP.
 
-Give each test its own mailbox ([separate mailboxes](separate-mailboxes.md)).
-If tests share the default account instead:
+For an application that cannot use SMTP AUTH, configure its recipients to the
+account's registered recipient addresses. Unclaimed anonymous recipients route
+to `default`.
 
-- Use a unique address or `X-Test-ID` header per test, and search by it.
-- Set `MP_MAX_MESSAGES=0`, or retention can evict another test's messages.
-- Delete only the message IDs the test created.
-
-## Pinning
-
-Pin this repository as a Git submodule, or pin a built image. To run several
-stacks side by side, change the published host ports and keep the container
-ports as they are ([run and test](run-and-test.md)).
-
-The sandbox never delivers mail onward, so a test stack needs no real mail
-credentials and can't email real people.
+When running the binary outside Compose, enable STARTTLS with
+`MAILARKY_SMTP_TLS_MODE=starttls`, or explicitly allow local plaintext AUTH
+with `MAILARKY_SMTP_AUTH_ALLOW_INSECURE=true`. IMAP always uses implicit TLS.

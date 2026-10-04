@@ -1,42 +1,48 @@
 # IMAP behavior
 
-IMAP4rev1 over implicit TLS (TLS 1.2 or later) on port 1993. Every account
-starts with `INBOX`, `Sent` and `Archive`.
+The listener uses implicit TLS and account credentials shared with SMTP AUTH.
+Every account has its own folders and UID space. Initial folders are `INBOX`,
+`Sent`, `Archive`, and the configured SMTP folder.
 
-## Supported commands
-
-| Command | Notes |
+| Operation | Behavior |
 | --- | --- |
-| LOGIN | The username chooses the account |
-| LIST, LSUB, SELECT, EXAMINE, STATUS | |
-| SEARCH, FETCH (and UID variants) | [Toxics](../how-to/toxics.md) may delay, hide or alter results |
-| APPEND | Keeps the supplied flags and INTERNALDATE |
-| STORE | Flags are saved and show up as read/unread in HTTP |
-| COPY | The copy gets a new UID |
-| EXPUNGE | Removes messages flagged `\Deleted` |
-| CREATE, DELETE, RENAME, SUBSCRIBE, UNSUBSCRIBE | `INBOX` cannot be deleted |
+| LIST / LSUB | Account-local folders and subscriptions |
+| SELECT / EXAMINE | Read-write / read-only selected view |
+| STATUS | Counts, UIDNEXT, UIDVALIDITY, flags |
+| SEARCH / UID SEARCH | Criteria evaluated against that account's messages |
+| FETCH / UID FETCH | Envelope, flags, dates, body structure and sections |
+| BODY[] / BODY[section] / RFC822 / RFC822.TEXT | Set `\Seen` in a writable selection |
+| BODY.PEEK / RFC822.HEADER / metadata | Preserve `\Seen` |
+| STORE / UID STORE | Change flags; SILENT suppresses replies for that command's changes, while other sessions' changes are still reported |
+| APPEND | Store raw MIME in an existing folder |
+| COPY / UID COPY | Copy with a new destination UID |
+| EXPUNGE | Remove messages carrying `\Deleted` |
+| CLOSE | Deselect; expunge only for a writable selection |
+| CREATE / DELETE / RENAME | Folder operations; INBOX cannot be deleted |
+| NOOP | Flush pending external changes |
+| IDLE | Notify while selected; DONE ends IDLE |
 
-## Things to rely on
+UIDs increase and are not reused within an epoch. Persistence preserves UIDs
+and UIDVALIDITY. An in-memory restart generates new epochs. A reset fault
+changes UIDVALIDITY; existing selected sessions are disconnected on their next
+command or update poll so clients must reconnect and resynchronize.
 
-- **UIDs never change.** Deleting mail doesn't renumber them. Sequence numbers
-  can change, so use UIDs.
-- **UIDVALIDITY** is random per folder. It changes when in-memory state is lost
-  on restart, and survives restarts when persistence is on.
-- **No push.** IDLE isn't supported, so poll with STATUS or UID SEARCH.
-- **Reading doesn't mark as read** over IMAP. Only STORE does. The HTTP message
-  detail endpoint *does* mark as read.
+Selected clients receive EXISTS, EXPUNGE, and flag updates for changes from
+HTTP, retention, or other IMAP sessions. Sequence-number views remain stable
+until the corresponding EXPUNGE is sent. EXPUNGE is deferred during non-UID
+FETCH, STORE, and SEARCH. Use UID commands for synchronization.
 
-## Where mail comes from
+A writable body FETCH commits its implicit `\Seen` changes in one store
+mutation before sending the prepared results. Hidden messages and messages at
+or after a terminating content fault do not acquire `\Seen` from that fetch.
+Content disconnects and raw replies follow any earlier FETCH results and end
+that FETCH stream.
 
-| Source | Folder | INTERNALDATE |
-| --- | --- | --- |
-| SMTP | `Sent` (configurable) | Arrival time |
-| `POST /messages` | `INBOX` unless `folder` is given | `internal_date`, else `date`, else now |
-| Raw import | The `folder` parameter | Arrival time |
-| IMAP APPEND | Target folder | As supplied |
+Message faults alter the selected response, not stored MIME. A `hide` fault can
+make SEARCH/FETCH omit a message while folder counts still reflect actual
+storage; this inconsistency is intentional fault behavior.
 
-All sources share one store, so HTTP and IMAP always see the same messages.
-Raw MIME is stored unchanged. Bcc recipients known only from the SMTP envelope
-appear in HTTP metadata, not in the MIME.
-
-Duplicate Message-IDs are allowed unless `MP_IGNORE_DUPLICATE_IDS=true`.
+The implementation uses the [go-imap v2 fork](https://github.com/johlo/go-imap/tree/imap-v2-protocol-hooks).
+The listener advertises IMAP4rev1. There is no CONDSTORE, QRESYNC, or UIDPLUS.
+MOVE is not implemented. IDLE requires a selected folder. For TCP behavior,
+combine the service with Toxiproxy.

@@ -7,19 +7,17 @@ style tag       text: (color: theme-muted)
 style invisible fill: none  border: none
 style call      text: (color: theme-muted, size: small)
 
-node sandbox "Mail Sandbox / [tag]\[Software system][/tag] / Captures SMTP mail, serves it over TLS IMAP and exposes it through an HTTP API" (wrap: 30)  style: system
+node sandbox "Mailarky / [tag]\[Software system][/tag] / Captures SMTP mail, serves it over TLS IMAP and exposes it through an HTTP API" (wrap: 30)  style: system
 
-node app "Application under test / [tag]\[External system][/tag] / Sends email and imports a mailbox" (wrap: 26)  left of sandbox (gap: wide)  style: external
+node app "Application under test / [tag]\[External system][/tag] / Sends and reads mail with a test account" (wrap: 26)  left of sandbox (gap: wide)  style: external
 node tests "Test suite / [tag]\[Person or CI job][/tag] / Drives the application and asserts on its mail" (wrap: 26)  above app and sandbox (gap: wide)  style: person
 
 // The optional systems share one column so their boxes line up.
 node optional ""  right of sandbox (gap: wide)  style: invisible  contents: (widths: match)
 node optional.hooks "Webhook receiver / [tag]\[External system][/tag] / Optional. Notified of new messages" (wrap: 26)  style: external
-node optional.spamd "SpamAssassin / [tag]\[External system][/tag] / Optional. Scores messages for spam checks" (wrap: 26)  style: external
 
 edge tests -> app  "Triggers actions"  from: bottom  to: top  style: call
 edge tests -> sandbox  "Seeds mail, inspects it, injects faults / \[HTTP]"  from: bottom  to: top  style: call
 edge app -> sandbox  "Sends mail / \[SMTP]"  from: right  to: left  style: call
 edge sandbox -> app  "Reads the mailbox / \[IMAP over TLS]"  from: left  to: right  style: call
 edge sandbox -> optional.hooks  "Posts webhooks \[HTTP]"  from: right  to: left  style: call
-edge sandbox -> optional.spamd  "Checks spam \[spamd]"  from: right  to: left  style: call

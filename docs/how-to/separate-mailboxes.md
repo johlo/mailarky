@@ -1,66 +1,34 @@
-# Give each test a separate mailbox
+# Isolate parallel tests with accounts
 
-Each mailbox is an independent account: its own messages, folders, UIDs, IMAP
-login, SMTP addresses and toxics. All accounts share the same ports.
-
-## Create
+Create one account in test setup and delete it in teardown. Use its username
+and password for **both SMTP and IMAP**.
 
 ```sh
-curl -fsS http://localhost:8026/api/v1/mailboxes -H 'Content-Type: application/json' -d '{}'
+curl -fsS http://localhost:8026/api/v1/accounts \
+  -H 'Content-Type: application/json' -d '{"name":"test-order-42"}'
 ```
 
-```json
-{
-  "id": "3f1c…",
-  "username": "mailbox-3f1c…",
-  "password": "…",
-  "recipients": ["3f1c…@mailbox.test"],
-  "api_base": "/mailboxes/3f1c…"
-}
-```
+The response contains `id`, `username`, `password`, `recipients`, and `api_base`.
+Save the password when creating the account; subsequent GET requests omit it.
 
-Keep the response in your test fixture. The password is returned only here.
-You can also set `name`, `username`, `password` and `recipients` yourself.
-Names, usernames and recipients must be unique across accounts.
+1. Configure the application's SMTP and IMAP clients with those credentials.
+2. Seed incoming messages at `POST {api_base}/messages`.
+3. Let the application send to any customer addresses it normally uses.
+4. Assert on `{api_base}/messages?query=folder:Sent` and add account faults at
+   `{api_base}/faults` when needed.
+5. Delete `/api/v1/accounts/{id}` in a teardown/finally block.
 
-## Use
+Two tests may send to the same recipient and reuse the same Message-ID because
+AUTH selects their separate stores. Rules, message IDs, UID spaces, and event
+streams are account-local. Do not use the shared `default` account for parallel
+tests that modify the same fixtures or rules.
 
-| Interface | How to reach the account |
-| --- | --- |
-| SMTP (port 1025) | Send to one of its `recipients`. Mail lands in `Sent`. |
-| IMAP (port 1993) | Log in with its `username` and `password`. |
-| HTTP | Prefix any API path with `api_base`, e.g. `/mailboxes/3f1c…/api/v1/messages`. |
+If the application cannot authenticate SMTP, send to a returned `recipients`
+address or register exact recipients during creation. Registered addresses
+must be unique because anonymous delivery has no other account identity.
+A transaction targeting multiple registered accounts delivers a copy to each.
 
-```sh
-API=http://localhost:8026/mailboxes/3f1c…
-curl -fsS "$API/api/v1/search?query=subject:Welcome"
-curl -fsS "$API/messages" -H 'Content-Type: application/json' \
-  -d '{"from":"alice@example.test","to":["3f1c…@mailbox.test"],"subject":"Incoming fixture"}'
-```
-
-Rules to know:
-
-- SMTP routes by the **envelope recipient**, not the `To` header. Unknown
-  addresses go to the default account.
-- One SMTP transaction can only reach one account. Mixing accounts returns 553.
-- HTTP fixtures and IMAP APPEND go to the account you address, whatever the
-  headers say.
-- The generated credentials are for IMAP only. SMTP and HTTP use the
-  server-wide auth settings.
-- Paths without a prefix address the default account.
-
-## Delete
-
-```sh
-curl -fsS -X DELETE http://localhost:8026/api/v1/mailboxes/3f1c…
-```
-
-This removes the account's messages, toxics and data file. Its addresses then
-return 550 instead of falling back to the default account. The default account
-cannot be deleted.
-
-## Persistence
-
-`GET /api/v1/mailboxes` lists accounts. Without `MP_DATABASE` they disappear
-on restart. With it, accounts and their mail survive, stored in
-`<MP_DATABASE>.mailboxes/`. Toxics never survive a restart.
+Deleting an account closes its store and prevents further authentication.
+Previously registered addresses are rejected until reassigned, rather than
+falling back into the default account. See [design](../explanation/design.md)
+for delivery and transaction semantics.

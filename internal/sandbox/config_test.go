@@ -3,66 +3,78 @@ package sandbox
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
-func TestRenameKeepsEnvironmentAliasesAndPrecedence(t *testing.T) {
-	legacyFile := filepath.Join(t.TempDir(), "legacy.yaml")
-	currentFile := filepath.Join(t.TempDir(), "current.yaml")
-	for path, content := range map[string]string{legacyFile: "max_messages: 7\n", currentFile: "max_messages: 9\n"} {
-		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
-			t.Fatal(err)
-		}
+func TestEnvironmentAndFlagPrecedence(t *testing.T) {
+	configFile := filepath.Join(t.TempDir(), "mailarky.yaml")
+	if err := os.WriteFile(configFile, []byte("max_messages: 7\nusername: yaml-user\n"), 0600); err != nil {
+		t.Fatal(err)
 	}
-	settings := []struct{ old, current, oldValue, currentValue string }{
-		{"MAIL_EMULATOR_CONFIG", "MAIL_SANDBOX_CONFIG", legacyFile, currentFile},
-		{"SMTP_EMULATOR_PORT", "MAIL_SANDBOX_SMTP_PORT", "11025", "21025"},
-		{"IMAP_EMULATOR_PORT", "MAIL_SANDBOX_IMAP_PORT", "11993", "21993"},
-		{"IMAP_EMULATOR_HTTP_PORT", "MAIL_SANDBOX_HTTP_PORT", "18026", "28026"},
-		{"IMAP_EMULATOR_USERNAME", "MAIL_SANDBOX_IMAP_USERNAME", "legacy-user", "current-user"},
-		{"IMAP_EMULATOR_PASSWORD", "MAIL_SANDBOX_IMAP_PASSWORD", "legacy-password", "current-password"},
-		{"IMAP_EMULATOR_CERT", "MAIL_SANDBOX_IMAP_CERT", "legacy.crt", "current.crt"},
-		{"IMAP_EMULATOR_KEY", "MAIL_SANDBOX_IMAP_KEY", "legacy.key", "current.key"},
-		{"SMTP_EMULATOR_FOLDER", "MAIL_SANDBOX_SMTP_FOLDER", "INBOX", "Archive"},
-		{"SMTP_EMULATOR_TLS_MODE", "MAIL_SANDBOX_SMTP_TLS_MODE", "tls", "starttls"},
+	settings := map[string]string{
+		"MAILARKY_CONFIG":        configFile,
+		"MAILARKY_SMTP_PORT":     "21025",
+		"MAILARKY_IMAP_PORT":     "21993",
+		"MAILARKY_HTTP_PORT":     "28026",
+		"MAILARKY_USERNAME":      "env-user",
+		"MAILARKY_PASSWORD":      "env-password",
+		"MAILARKY_IMAP_CERT":     "test.crt",
+		"MAILARKY_IMAP_KEY":      "test.key",
+		"MAILARKY_SMTP_FOLDER":   "Archive",
+		"MAILARKY_SMTP_TLS_MODE": "starttls",
+		"MAILARKY_MAX_MESSAGES":  "9",
 	}
-	for _, setting := range settings {
-		t.Setenv(setting.old, setting.oldValue)
-		t.Setenv(setting.current, setting.currentValue)
+	for name, value := range settings {
+		t.Setenv(name, value)
 	}
 	c, err := loadConfig(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if c.MaxMessages != 9 || c.SMTPAddress != ":21025" || c.IMAPAddress != ":21993" || c.HTTPAddress != ":28026" ||
-		c.Username != "current-user" || c.Password != "current-password" || c.Cert != "current.crt" || c.Key != "current.key" || c.SMTPFolder != "Archive" || c.SMTPTLS != "starttls" {
-		t.Fatal("new names did not take precedence over aliases")
+		c.Username != "env-user" || c.Password != "env-password" || c.Cert != "test.crt" || c.Key != "test.key" || c.SMTPFolder != "Archive" || c.SMTPTLS != "starttls" {
+		t.Fatal("environment did not configure the service or override YAML")
 	}
-	for _, setting := range settings {
-		if err := os.Unsetenv(setting.current); err != nil {
-			t.Fatal(err)
-		}
-	}
+	t.Setenv("MAILARKY_SMTP_BIND_ADDR", "127.0.0.1:31025")
+	t.Setenv("MAILARKY_IMAP_BIND_ADDR", "127.0.0.1:31993")
+	t.Setenv("MAILARKY_HTTP_BIND_ADDR", "127.0.0.1:38026")
 	c, err = loadConfig(nil)
-	if err != nil {
+	if err != nil || c.SMTPAddress != "127.0.0.1:31025" || c.IMAPAddress != "127.0.0.1:31993" || c.HTTPAddress != "127.0.0.1:38026" {
+		t.Fatal("bind addresses did not override port settings", err)
+	}
+	c, err = loadConfig([]string{"--imap=127.0.0.1:41993", "--max-messages=11", "--username=cli-user"})
+	if err != nil || c.IMAPAddress != "127.0.0.1:41993" || c.MaxMessages != 11 || c.Username != "cli-user" {
+		t.Fatal("command-line flags did not override environment and YAML", err)
+	}
+}
+
+func TestDurationSettingsAndUnambiguousTLSModes(t *testing.T) {
+	t.Setenv("MAILARKY_MAX_AGE", "2h")
+	t.Setenv("MAILARKY_WEBHOOK_DELAY", "250ms")
+	t.Setenv("MAILARKY_WEBHOOK_INTERVAL", "1.5s")
+	c, err := loadConfig(nil)
+	if err != nil || c.MaxAge != 2*time.Hour || c.WebhookDelay != 250*time.Millisecond || c.WebhookLimit != 1500*time.Millisecond {
+		t.Fatal(c, err)
+	}
+	if c.MaxMessages != 0 {
+		t.Fatal("retention should be unlimited by default")
+	}
+	t.Setenv("MAILARKY_SMTP_REQUIRE_STARTTLS", "true")
+	if _, err := loadConfig(nil); err == nil || !strings.Contains(err.Error(), "smtp-require-starttls") {
 		t.Fatal(err)
 	}
-	if c.MaxMessages != 7 || c.SMTPAddress != ":11025" || c.IMAPAddress != ":11993" || c.HTTPAddress != ":18026" ||
-		c.Username != "legacy-user" || c.Password != "legacy-password" || c.Cert != "legacy.crt" || c.Key != "legacy.key" || c.SMTPFolder != "INBOX" || c.SMTPTLS != "tls" {
-		t.Fatal("legacy environment no longer configures the service")
+	t.Setenv("MAILARKY_SMTP_TLS_MODE", "starttls")
+	if _, err := loadConfig(nil); err != nil {
+		t.Fatal(err)
 	}
-	t.Setenv("IMAP_EMULATOR_BIND_ADDR", "127.0.0.1:11994")
-	c, err = loadConfig(nil)
-	if err != nil || c.IMAPAddress != "127.0.0.1:11994" {
-		t.Fatal("legacy bind address did not override port", err)
+	t.Setenv("MAILARKY_SMTP_REQUIRE_STARTTLS", "false")
+	t.Setenv("MAILARKY_SMTP_TLS_MODE", "tls")
+	if c, err := loadConfig(nil); err != nil || c.SMTPTLS != "tls" {
+		t.Fatal(c, err)
 	}
-	t.Setenv("MAIL_SANDBOX_IMAP_BIND_ADDR", "127.0.0.1:21994")
-	c, err = loadConfig(nil)
-	if err != nil || c.IMAPAddress != "127.0.0.1:21994" {
-		t.Fatal("new bind address did not override legacy bind address", err)
-	}
-	c, err = loadConfig([]string{"--imap=127.0.0.1:31994", "--max=11", "--imap-username=cli-user"})
-	if err != nil || c.IMAPAddress != "127.0.0.1:31994" || c.MaxMessages != 11 || c.Username != "cli-user" {
-		t.Fatal("command-line flags did not override environment and YAML", err)
+	if _, err := loadConfig([]string{"--enable-chaos"}); err == nil {
+		t.Fatal("removed flag accepted")
 	}
 }

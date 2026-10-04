@@ -1,4 +1,4 @@
-// C4 level 3: components of the Mail Sandbox service. Render with `make diagrams`.
+// C4 level 3: components of the Mailarky service. Render with `make diagrams`.
 
 style person    fill: theme-secondary-subtle  border: theme-secondary
 style component fill: theme-primary-subtle  border: theme-primary
@@ -9,38 +9,34 @@ style boundary  fill: none  border: theme-primary
 style tag       text: (color: theme-muted)
 style call      text: (color: theme-muted, size: small)
 
-node svc "Mail Sandbox service [tag]\[Container: Go][/tag]"  style: boundary
+node svc "Mailarky service [tag]\[Container: Go][/tag]"  style: boundary
 
-node svc.imap "IMAP server / [tag]\[Component: go-imap][/tag] / Serves folders over TLS IMAP4rev1 and applies IMAP toxics" (wrap: 26)  style: component
-node svc.smtp "SMTP server / [tag]\[Component: go-smtp][/tag] / Captures deliveries and applies SMTP toxics" (wrap: 26)  left of svc.imap  style: component
-node svc.http "HTTP API / [tag]\[Component: net/http][/tag] / Fixtures, search, inspection, toxics and account management" (wrap: 26)  right of svc.imap  style: component
+node svc.imap "IMAP server / [tag]\[Component: go-imap v2][/tag] / Serves folders over TLS IMAP4rev1 and applies IMAP faults" (wrap: 26)  style: component
+node svc.smtp "SMTP server / [tag]\[Component: go-smtp][/tag] / Captures deliveries and applies SMTP faults" (wrap: 26)  left of svc.imap  style: component
+node svc.http "HTTP API / [tag]\[Component: net/http][/tag] / Fixtures, search, inspection, faults and account management" (wrap: 26)  right of svc.imap  style: component
 
-node svc.manager "Mailbox manager / [tag]\[Component][/tag] / Account catalog. Routes SMTP recipients, IMAP logins and API paths to an account" (wrap: 60)  below svc.imap (gap: wide)  style: component
+node svc.manager "Service / [tag]\[Component][/tag] / Config, server faults and account catalog. Routes SMTP AUTH, anonymous recipients and IMAP logins" (wrap: 60)  below svc.imap (gap: wide)  style: component
 
-node svc.account "Account [tag]\[one per mailbox][/tag]"  below svc.manager (gap: wide)  style: account  deck: "" ""
-node svc.account.store "Message store / [tag]\[Component][/tag] / Raw MIME, folders, UIDs, flags and tags. One append path for every protocol" (wrap: 28)  style: component
-node svc.account.toxics "Toxic registry / [tag]\[Component][/tag] / Message-scoped faults, consulted by SMTP and IMAP" (wrap: 28)  right of svc.account.store  level with svc.account.store  style: component
+node svc.account "Account [tag]\[one per test][/tag]"  below svc.manager (gap: wide)  style: account  deck: "" ""
+node svc.account.store "Message store / [tag]\[Component][/tag] / Raw MIME, folders, UIDs, flags. One append path for every protocol" (wrap: 28)  style: component
+node svc.account.faults "Account fault registry / [tag]\[Component][/tag] / Trigger, filter and typed action. Atomic claims, unlocked execution" (wrap: 28)  right of svc.account.store  level with svc.account.store  style: component
 
-node svc.diag "Diagnostics / [tag]\[Component][/tag] / Link, HTML compatibility and spam checks" (wrap: 24)  right of svc.http  style: component
 node svc.notify "Notifications / [tag]\[Component][/tag] / WebSocket stream and webhooks" (wrap: 24)  right of svc.account  level with svc.account  style: component
 
 node app "Application under test / [tag]\[External system][/tag]" (wrap: 26)  above svc.smtp and svc.imap (gap: wide)  style: external
 node tests "Test suite / [tag]\[Person or CI job][/tag]" (wrap: 26)  above svc.http (gap: wide)  level with app  style: person
 node db "Message database / [tag]\[Container: bbolt files][/tag]" (wrap: 30)  below svc.account (gap: wide)  style: store
-node spamd "SpamAssassin / [tag]\[External system][/tag]" (wrap: 20)  right of svc (gap: wide)  level with svc.diag  style: external
 node hooks "Webhook receiver / [tag]\[External system][/tag]" (wrap: 20)  right of svc (gap: wide)  level with svc.notify  style: external
 
 edge app -> svc.smtp  "Sends mail \[SMTP]"  from: bottom  to: top  style: call
 edge app -> svc.imap  "Reads mail \[IMAPS]"  from: bottom  to: top  style: call
 edge tests -> svc.http  "Seeds, inspects, injects faults \[HTTP]"  from: bottom  to: top  style: call
 
-edge svc.smtp -> svc.manager  "Routes by recipient"  from: bottom  to: left  style: call
+edge svc.smtp -> svc.manager  "Routes AUTH first"  from: bottom  to: left  style: call
 edge svc.imap -> svc.manager  "Logs in"  from: bottom  to: top  style: call
 edge svc.http -> svc.manager  "Resolves api_base"  from: bottom  to: right  style: call
 edge svc.manager -> svc.account  "Selects account"  from: bottom  to: top  style: call
 edge svc.account -> svc.notify  "Emits events"  from: right  to: left  style: call
 edge svc.account.store -> db  "Persists \[bbolt]"  from: bottom  to: top  style: call
 
-edge svc.http -> svc.diag  "Runs checks"  from: right  to: left  style: call
-edge svc.diag -> spamd  "Scores \[spamd]"  from: right  to: left  style: call
 edge svc.notify -> hooks  "Posts \[HTTP]"  from: right  to: left  style: call

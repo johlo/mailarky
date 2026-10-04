@@ -2,7 +2,6 @@ package sandbox
 
 import (
 	"bufio"
-	"context"
 	"crypto/subtle"
 	"crypto/tls"
 	"errors"
@@ -14,7 +13,7 @@ import (
 	"time"
 
 	"github.com/emersion/go-sasl"
-	smtp "github.com/emersion/go-smtp"
+	"github.com/johlo/go-smtp"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -58,10 +57,10 @@ func (users credentials) valid(username, password string) bool {
 	return subtle.ConstantTimeCompare([]byte(stored), []byte(password)) == 1
 }
 
-type smtpBackend struct {
-	store   *mailboxBackend
-	manager *mailboxManager
-	users   credentials
+type smtpBackend struct{ service *Service }
+type smtpDelivery struct {
+	account    *Account
+	recipients []string
 }
 type smtpSession struct {
 	backend       *smtpBackend
@@ -69,34 +68,28 @@ type smtpSession struct {
 	from          string
 	recipients    []string
 	username      string
-	authenticated bool
-	selected      *mailboxBackend
+	authenticated *Account
+	deliveries    []*smtpDelivery
+	completed     *storedMessage
 }
 
 func (b *smtpBackend) NewSession(c *smtp.Conn) (smtp.Session, error) {
 	return &smtpSession{backend: b, conn: c}, nil
 }
-func (s *smtpSession) Reset() { s.from = ""; s.recipients = nil; s.selected = nil }
-func (s *smtpSession) store() *mailboxBackend {
-	if s.selected != nil {
-		return s.selected
-	}
-	return s.backend.store
-}
-func (s *smtpSession) Logout() error { return nil }
-func (s *smtpSession) AuthMechanisms() []string {
-	if len(s.backend.users) > 0 || s.backend.store.config.SMTPAcceptAny {
-		return []string{"PLAIN", "LOGIN"}
-	}
-	return nil
-}
+func (s *smtpSession) Reset()                   { s.from = ""; s.recipients = nil; s.deliveries = nil; s.completed = nil }
+func (s *smtpSession) Logout() error            { return nil }
+func (s *smtpSession) AuthMechanisms() []string { return []string{"PLAIN", "LOGIN"} }
 func (s *smtpSession) Auth(mechanism string) (sasl.Server, error) {
 	authenticate := func(username, password string) error {
-		if !s.backend.store.config.SMTPAcceptAny && !s.backend.users.valid(username, password) {
+		if err := s.authenticationFault(username); err != nil {
+			return err
+		}
+		account := s.backend.service.authenticate(username, password)
+		if account == nil {
 			return smtp.ErrAuthFailed
 		}
 		s.username = username
-		s.authenticated = true
+		s.authenticated = account
 		return nil
 	}
 	switch mechanism {
@@ -151,38 +144,17 @@ func validEnvelope(address string, empty bool) bool {
 	return err == nil && a.Address == address
 }
 
-func (s *smtpSession) fault(stage string, raw []byte) error {
-	b := s.store()
-	m := &storedMessage{EnvelopeFrom: s.from, EnvelopeTo: s.recipients, Folder: b.config.SMTPFolder, Headers: map[string][]string{}}
-	if len(raw) > 0 {
-		detail, headers, err := parseMessage(raw, time.Now(), s.from, s.recipients)
-		if err != nil {
-			return &smtp.SMTPError{Code: 554, Message: "Invalid MIME message"}
-		}
-		m.Detail, m.Headers = detail, headers
-	}
-	for _, t := range b.toxics.claim("smtp", stage, m) {
-		switch t.Type {
-		case "smtp_reject":
-			b.rejected.Add(1)
-			return &smtp.SMTPError{Code: t.Attributes.Code, Message: "Toxic " + t.Name}
-		case "smtp_delay":
-			if err := waitToxic(context.Background(), b.done, t.Attributes.DelayMS); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+func (s *smtpSession) envelope(recipients []string) *storedMessage {
+	return &storedMessage{EnvelopeFrom: s.from, EnvelopeTo: recipients, Headers: map[string][]string{}}
 }
-
 func (s *smtpSession) Mail(from string, _ *smtp.MailOptions) error {
-	c := s.backend.store.config
-	if len(s.backend.users) > 0 && !c.SMTPAcceptAny && !s.authenticated {
+	c := s.backend.service.config
+	if c.SMTPRequireAuth && s.authenticated == nil {
 		return smtp.ErrAuthRequired
 	}
 	if c.RequireTLS {
 		if _, ok := s.conn.TLSConnectionState(); !ok {
-			return &smtp.SMTPError{Code: 530, Message: "TLS is required"}
+			return &smtp.SMTPError{Code: 530, Message: "STARTTLS is required"}
 		}
 	}
 	if !validEnvelope(from, true) {
@@ -190,87 +162,104 @@ func (s *smtpSession) Mail(from string, _ *smtp.MailOptions) error {
 	}
 	s.Reset()
 	s.from = from
-	// Recipient routing cannot select an account until RCPT TO. Defer sender
-	// toxics until then so the default account cannot affect another account.
-	if s.backend.manager != nil {
-		return nil
-	}
-	return s.fault("sender", nil)
+	// MAIL faults run at MAIL. Without AUTH the account is not yet known.
+	return s.faults("MAIL", "before", s.authenticated, s.envelope(nil), true)
 }
 func (s *smtpSession) Rcpt(to string, _ *smtp.RcptOptions) error {
 	if !validEnvelope(to, false) {
 		return &smtp.SMTPError{Code: 501, Message: "Invalid envelope recipient"}
 	}
-	if h := s.backend.manager; h != nil {
-		target := h.route(to)
-		if target == nil {
-			return &smtp.SMTPError{Code: 550, Message: "Mailbox is unavailable"}
-		}
-		if s.selected != nil && s.selected != target {
-			return &smtp.SMTPError{Code: 553, Message: "Use separate SMTP transactions for different mailboxes"}
-		}
-		if s.selected == nil {
-			s.selected = target
-			if err := s.fault("sender", nil); err != nil {
-				s.selected = nil
-				return err
-			}
-		}
+	account := s.authenticated
+	if account == nil {
+		account = s.backend.service.route(to)
 	}
-	s.recipients = append(s.recipients, to)
-	if err := s.fault("recipient", nil); err != nil {
-		s.recipients = s.recipients[:len(s.recipients)-1]
+	if account == nil {
+		return &smtp.SMTPError{Code: 550, Message: "Account is unavailable"}
+	}
+	select {
+	case <-account.done:
+		return &smtp.SMTPError{Code: 550, Message: "Account is unavailable"}
+	default:
+	}
+	// RCPT matches only this recipient, not previously accepted recipients.
+	if err := s.faults("RCPT", "before", account, s.envelope([]string{to}), true); err != nil {
 		return err
 	}
+	s.conn.HookData = smtpCommandContext{username: s.username, accounts: []*smtpDelivery{{account: account, recipients: []string{to}}}, message: s.envelope([]string{to})}
+	s.recipients = append(s.recipients, to)
+	for _, delivery := range s.deliveries {
+		if delivery.account == account {
+			delivery.recipients = append(delivery.recipients, to)
+			return nil
+		}
+	}
+	s.deliveries = append(s.deliveries, &smtpDelivery{account: account, recipients: []string{to}})
 	return nil
 }
 func (s *smtpSession) Data(reader io.Reader) error {
-	b := s.store()
-	raw, err := io.ReadAll(io.LimitReader(reader, b.config.MaxSize+1))
+	raw, err := io.ReadAll(io.LimitReader(reader, s.backend.service.config.MaxSize+1))
 	if err != nil {
 		return err
 	}
-	if int64(len(raw)) > b.config.MaxSize {
-		b.rejected.Add(1)
+	if int64(len(raw)) > s.backend.service.config.MaxSize {
 		return &smtp.SMTPError{Code: 552, Message: "Message size exceeds limit"}
 	}
-	if err := s.fault("data", raw); err != nil {
+	now := time.Now().UTC()
+	detail, headers, err := parseMessage(raw, now, s.from, nil)
+	if err != nil {
+		return &smtp.SMTPError{Code: 554, Message: "Invalid MIME message"}
+	}
+	parsed := &parsedMessage{detail: detail, headers: headers}
+	command := s.conn.Command()
+	if command != "BDAT" {
+		command = "DATA"
+	}
+	all := &storedMessage{Raw: raw, Detail: withEnvelope(detail, s.recipients), Headers: headers, EnvelopeFrom: s.from, EnvelopeTo: s.recipients}
+	if err := s.faults(command, "content", nil, all, true); err != nil {
 		return err
 	}
-	if _, err := b.append(raw, appendOptions{Folder: b.config.SMTPFolder, From: s.from, To: s.recipients, Username: s.username, Notify: true}); err != nil {
-		b.rejected.Add(1)
-		return &smtp.SMTPError{Code: 554, Message: "Message could not be stored"}
+	for _, delivery := range s.deliveries {
+		m := &storedMessage{Raw: raw, Detail: withEnvelope(detail, delivery.recipients), Headers: headers, EnvelopeFrom: s.from, EnvelopeTo: delivery.recipients}
+		if err := s.faults(command, "content", delivery.account, m, false); err != nil {
+			return err
+		}
 	}
-	b.accepted.Add(1)
-	b.acceptedSize.Add(uint64(len(raw)))
+	// SMTP has one final DATA result: reject before any delivery on content faults.
+	// Account databases commit independently. A storage error can leave earlier
+	// copies committed; the 451 retry may deliver duplicates to those accounts.
+	for _, delivery := range s.deliveries {
+		a := delivery.account
+		if _, err := a.append(raw, appendOptions{Folder: s.backend.service.config.SMTPFolder, Date: now, From: s.from, To: delivery.recipients, Username: s.username, Notify: true, Parsed: parsed}); err != nil {
+			a.rejected.Add(1)
+			return &smtp.SMTPError{Code: 451, Message: "Message could not be stored"}
+		}
+		a.accepted.Add(1)
+		a.acceptedSize.Add(uint64(len(raw)))
+	}
+	// Keep the parsed message through the completion hook; after faults model lost ACKs.
+	s.completed = all
+	s.conn.HookData = smtpCommandContext{username: s.username, accounts: append([]*smtpDelivery{}, s.deliveries...), message: all}
 	return nil
 }
 
-func newSMTPServer(b *mailboxBackend, managers ...*mailboxManager) (*smtp.Server, error) {
-	users, err := readCredentials(b.config.SMTPAuthFile, b.config.SMTPAuth)
-	if err != nil {
-		return nil, err
-	}
-	back := &smtpBackend{store: b, users: users}
-	if len(managers) > 0 {
-		back.manager = managers[0]
-	}
+func newSMTPServer(service *Service) (*smtp.Server, error) {
+	c := service.config
+	back := &smtpBackend{service: service}
 	srv := smtp.NewServer(back)
-	srv.Addr = b.config.SMTPAddress
-	srv.Domain = "mail-sandbox.test"
-	srv.MaxMessageBytes = b.config.MaxSize
+	back.installFaultHooks(srv)
+	srv.Addr = c.SMTPAddress
+	srv.Domain = "mailarky.test"
+	srv.MaxMessageBytes = c.MaxSize
 	srv.MaxRecipients = 1000
 	srv.ReadTimeout = time.Minute
 	srv.WriteTimeout = time.Minute
-	srv.AllowInsecureAuth = b.config.SMTPAllowInsecureAuth
+	srv.AllowInsecureAuth = c.SMTPAllowInsecureAuth
 	srv.EnableSMTPUTF8 = true
-	if b.config.SMTPTLS != "" {
-		certPath, keyPath := b.config.SMTPCert, b.config.SMTPKey
+	if c.SMTPTLS != "" {
+		certPath, keyPath := c.SMTPCert, c.SMTPKey
 		if certPath == "" {
-			certPath = b.config.Cert
-		}
-		if keyPath == "" {
-			keyPath = b.config.Key
+			certPath = c.Cert
+			keyPath = c.Key
 		}
 		cert, err := tls.LoadX509KeyPair(certPath, keyPath)
 		if err != nil {

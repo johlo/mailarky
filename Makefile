@@ -5,8 +5,8 @@ test:
 	go vet ./...
 
 run:
-	MAIL_SANDBOX_IMAP_CERT=testdata/tls/server.crt \
-	MAIL_SANDBOX_IMAP_KEY=testdata/tls/server.key go run ./cmd/mail-sandbox
+	MAILARKY_IMAP_CERT=testdata/tls/server.crt \
+	MAILARKY_IMAP_KEY=testdata/tls/server.key go run ./cmd/mailarky
 
 docker:
 	docker compose up -d --build

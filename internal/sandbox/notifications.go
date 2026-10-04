@@ -8,22 +8,20 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"runtime"
 	"sync"
 	"time"
 
 	"github.com/coder/websocket"
-	bolt "go.etcd.io/bbolt"
 )
 
-func (a *httpAPI) events(w http.ResponseWriter, r *http.Request) {
+func (a *accountAPI) events(w http.ResponseWriter, r *http.Request) {
 	connection, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		return
 	}
 	defer connection.Close(websocket.StatusNormalClosure, "")
 	ctx := connection.CloseRead(r.Context())
-	events, unsubscribe := a.store.subscribe()
+	events, unsubscribe := a.account.notifier.subscribe()
 	defer unsubscribe()
 	for {
 		select {
@@ -43,18 +41,18 @@ func (a *httpAPI) events(w http.ResponseWriter, r *http.Request) {
 			}
 		case <-ctx.Done():
 			return
-		case <-a.store.done:
+		case <-a.account.done:
 			return
 		}
 	}
 }
 
 // Webhooks use one worker and a bounded queue. Retries are confined to HTTP
-// delivery and never hold mailbox or toxic locks or delay SMTP acknowledgement.
-func (b *mailboxBackend) startWorkers(ctx context.Context) func() {
+// delivery and never hold mailbox or fault locks or delay SMTP acknowledgement.
+func (b *Account) startWorkers(ctx context.Context) func() {
 	ctx, cancel := context.WithCancel(ctx)
 	var workers sync.WaitGroup
-	if b.config.MaxAge > 0 {
+	if b.service.config.MaxAge > 0 {
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
@@ -72,7 +70,7 @@ func (b *mailboxBackend) startWorkers(ctx context.Context) func() {
 			}
 		}()
 	}
-	if b.config.WebhookURL != "" {
+	if b.service.config.WebhookURL != "" {
 		queue := make(chan messageSummary, 1024)
 		b.afterAppend = func(m *storedMessage) {
 			select {
@@ -89,8 +87,8 @@ func (b *mailboxBackend) startWorkers(ctx context.Context) func() {
 			for {
 				select {
 				case summary := <-queue:
-					wait := b.config.WebhookDelay
-					if until := time.Until(last.Add(b.config.WebhookLimit)); until > wait {
+					wait := b.service.config.WebhookDelay
+					if until := time.Until(last.Add(b.service.config.WebhookLimit)); until > wait {
 						wait = until
 					}
 					if wait > 0 {
@@ -100,15 +98,15 @@ func (b *mailboxBackend) startWorkers(ctx context.Context) func() {
 					}
 					data, _ := json.Marshal(summary)
 					for attempt := 0; attempt < 3; attempt++ {
-						req, err := http.NewRequestWithContext(ctx, http.MethodPost, b.config.WebhookURL, bytes.NewReader(data))
+						req, err := http.NewRequestWithContext(ctx, http.MethodPost, b.service.config.WebhookURL, bytes.NewReader(data))
 						if err != nil {
 							log.Printf("webhook request: %v", err)
 							break
 						}
 						req.Header.Set("Content-Type", "application/json")
-						req.Header.Set("Mail-Sandbox-Mailbox", b.config.MailboxID)
-						if b.config.Label != "" {
-							req.Header.Set("Mail-Sandbox-Label", b.config.Label)
+						req.Header.Set("Mailarky-Mailbox", b.identity.ID)
+						if b.service.config.Label != "" {
+							req.Header.Set("Mailarky-Label", b.service.config.Label)
 						}
 						response, err := client.Do(req)
 						last = time.Now()
@@ -149,39 +147,81 @@ func waitDuration(ctx context.Context, d time.Duration) error {
 }
 
 func (a *httpAPI) info(w http.ResponseWriter, r *http.Request) {
-	list := a.store.snapshot()
-	unread := 0
-	tags := map[string]int{}
-	for _, m := range list {
-		if !hasFlag(m.Flags, "\\Seen") {
-			unread++
-		}
-		for _, tag := range m.Tags {
-			tags[tag]++
-		}
-	}
-	var mem runtime.MemStats
-	runtime.ReadMemStats(&mem)
-	database := "memory"
-	size := int64(0)
-	if a.store.db != nil {
-		database = a.store.config.Database
-		a.store.db.View(func(tx *bolt.Tx) error { size = tx.Size(); return nil })
-	}
-	jsonResponse(w, 200, map[string]any{"MailboxID": a.store.config.MailboxID, "Version": "mail-sandbox/2", "LatestVersion": "", "Database": database, "DatabaseSize": size, "Messages": len(list), "Unread": unread, "Tags": tags, "RuntimeStats": map[string]any{"Memory": mem.Alloc, "SMTPAccepted": a.store.accepted.Load(), "SMTPAcceptedSize": a.store.acceptedSize.Load(), "SMTPRejected": a.store.rejected.Load(), "SMTPIgnored": a.store.ignored.Load(), "MessagesDeleted": a.store.deleted.Load(), "Uptime": int64(time.Since(a.store.started).Seconds())}})
-}
-func (a *httpAPI) capabilities(w http.ResponseWriter, r *http.Request) {
-	c := a.store.config
-	jsonResponse(w, 200, map[string]any{"Label": c.Label, "ChaosEnabled": false, "MessageScopedToxics": true, "MailboxManagement": a.manager != nil, "WebUI": false, "DuplicatesIgnored": c.IgnoreDuplicates, "SpamAssassin": c.SpamAssassin != ""})
+	a.service.mu.RLock()
+	count := len(a.service.entries)
+	a.service.mu.RUnlock()
+	jsonResponse(w, 200, map[string]any{"service": "mailarky", "accounts": count, "protocols": []string{"smtp", "imap", "http"}})
 }
 func (a *httpAPI) metrics(w http.ResponseWriter, r *http.Request) {
-	if !a.store.config.EnableMetrics {
-		http.NotFound(w, r)
+	if !a.service.config.EnableMetrics {
+		apiError(w, 404, fmt.Errorf("metrics are disabled"))
 		return
 	}
-	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
-	values := map[string]uint64{"messages": uint64(len(a.store.snapshot())), "smtp_accepted_total": a.store.accepted.Load(), "smtp_rejected_total": a.store.rejected.Load(), "smtp_accepted_bytes_total": a.store.acceptedSize.Load(), "messages_deleted_total": a.store.deleted.Load(), "messages_ignored_total": a.store.ignored.Load()}
-	for name, value := range values {
-		fmt.Fprintf(w, "mail_sandbox_%s %d\n", name, value)
+	a.service.mu.RLock()
+	accounts := make([]*Account, 0, len(a.service.entries))
+	for _, account := range a.service.entries {
+		accounts = append(accounts, account)
 	}
+	a.service.mu.RUnlock()
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+	for _, account := range accounts {
+		values := map[string]uint64{"messages": uint64(len(account.snapshot())), "smtp_accepted_total": account.accepted.Load(), "smtp_rejected_total": account.rejected.Load(), "smtp_accepted_bytes_total": account.acceptedSize.Load(), "messages_deleted_total": account.deleted.Load(), "messages_ignored_total": account.ignored.Load()}
+		for name, value := range values {
+			fmt.Fprintf(w, "mailarky_%s{account=%q} %d\n", name, account.identity.ID, value)
+		}
+	}
+}
+
+type notification struct {
+	Type string `json:"type"`
+	Data any    `json:"data"`
+}
+type eventHub struct {
+	mu          sync.Mutex
+	subscribers map[chan notification]struct{}
+	closed      bool
+}
+
+func newEventHub() *eventHub { return &eventHub{subscribers: map[chan notification]struct{}{}} }
+func (h *eventHub) publish(event notification) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for ch := range h.subscribers {
+		select {
+		case ch <- event:
+		default:
+			close(ch)
+			delete(h.subscribers, ch)
+		}
+	}
+}
+func (h *eventHub) subscribe() (chan notification, func()) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	ch := make(chan notification, 64)
+	if h.closed {
+		close(ch)
+	} else {
+		h.subscribers[ch] = struct{}{}
+	}
+	return ch, func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		if _, ok := h.subscribers[ch]; ok {
+			delete(h.subscribers, ch)
+			close(ch)
+		}
+	}
+}
+func (h *eventHub) close() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.closed {
+		return
+	}
+	h.closed = true
+	for ch := range h.subscribers {
+		close(ch)
+	}
+	h.subscribers = map[chan notification]struct{}{}
 }

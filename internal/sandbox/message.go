@@ -2,69 +2,71 @@ package sandbox
 
 import (
 	"bytes"
-	"crypto/md5"
-	"crypto/sha1"
-	"crypto/sha256"
 	"fmt"
 	"io"
 	"net/mail"
-	"net/url"
 	"strings"
 	"time"
 
-	"github.com/emersion/go-imap"
-	"github.com/emersion/go-imap/backend/memory"
 	"github.com/emersion/go-message"
 	_ "github.com/emersion/go-message/charset"
+	"github.com/johlo/go-imap/v2"
 	"golang.org/x/net/html"
 )
 
+type address struct {
+	Name    string `json:"name"`
+	Address string `json:"address"`
+}
 type attachment struct {
-	PartID      string
-	FileName    string
-	ContentType string
-	ContentID   string
-	Size        int
-	Checksums   map[string]string
-	Data        []byte `json:"-"`
+	PartID      string `json:"part_id"`
+	FileName    string `json:"filename"`
+	ContentType string `json:"content_type"`
+	ContentID   string `json:"content_id,omitempty"`
+	Size        int    `json:"size"`
 }
-
-type unsubscribeInfo struct {
-	Header, HeaderPost string
-	Links              []string
-	Errors             string
-}
-
 type messageDetail struct {
-	MailboxID            string
-	ID                   string
-	MessageID            string
-	From                 *mail.Address
-	To, Cc, Bcc, ReplyTo []*mail.Address
-	Subject, Text, HTML  string
-	Date                 time.Time
-	Size                 int
-	Inline, Attachments  []attachment
-	Tags                 []string
-	ReturnPath, Username string
-	ListUnsubscribe      unsubscribeInfo
-	Folder               string
-	UID                  uint32
-	Read                 bool
+	MailboxID   string       `json:"account_id"`
+	ID          string       `json:"id"`
+	MessageID   string       `json:"message_id"`
+	From        *address     `json:"from"`
+	To          []*address   `json:"to"`
+	Cc          []*address   `json:"cc"`
+	Bcc         []*address   `json:"bcc"`
+	ReplyTo     []*address   `json:"reply_to"`
+	Subject     string       `json:"subject"`
+	Text        string       `json:"text"`
+	HTML        string       `json:"html"`
+	Date        time.Time    `json:"date"`
+	Size        int          `json:"size"`
+	Inline      []attachment `json:"inline"`
+	Attachments []attachment `json:"attachments"`
+	ReturnPath  string       `json:"return_path"`
+	Username    string       `json:"username"`
+	Folder      string       `json:"folder"`
+	UID         uint32       `json:"uid"`
+	Read        bool         `json:"read"`
+	Flags       []string     `json:"flags"`
 }
-
 type messageSummary struct {
-	MailboxID            string
-	ID, MessageID        string
-	From                 *mail.Address
-	To, Cc, Bcc, ReplyTo []*mail.Address
-	Subject, Snippet     string
-	Created              time.Time
-	Size, Attachments    int
-	Tags                 []string
-	Read                 bool
-	Username, Folder     string
-	UID                  uint32
+	MailboxID   string     `json:"account_id"`
+	ID          string     `json:"id"`
+	MessageID   string     `json:"message_id"`
+	From        *address   `json:"from"`
+	To          []*address `json:"to"`
+	Subject     string     `json:"subject"`
+	Snippet     string     `json:"snippet"`
+	Created     time.Time  `json:"created"`
+	Size        int        `json:"size"`
+	Attachments int        `json:"attachments"`
+	Read        bool       `json:"read"`
+	Username    string     `json:"username"`
+	Folder      string     `json:"folder"`
+	UID         uint32     `json:"uid"`
+}
+type parsedMessage struct {
+	detail  messageDetail
+	headers map[string][]string
 }
 
 // Raw is immutable. Mutable fields and maps belong to the store mutex.
@@ -76,7 +78,7 @@ type storedMessage struct {
 	UID                   uint32
 	Created, InternalDate time.Time
 	Raw                   []byte
-	Flags, Tags           []string
+	Flags                 []string
 	EnvelopeFrom          string
 	EnvelopeTo            []string
 	Username              string
@@ -84,16 +86,12 @@ type storedMessage struct {
 	Headers               map[string][]string `json:"-"`
 }
 
-func (m *storedMessage) memory() *memory.Message {
-	return &memory.Message{Uid: m.UID, Date: m.InternalDate, Size: uint32(len(m.Raw)), Flags: append([]string{}, m.Flags...), Body: m.Raw}
-}
-
 func (m *storedMessage) detail() messageDetail {
 	d := m.Detail
 	d.MailboxID = m.MailboxID
 	d.ID, d.Folder, d.UID, d.Username = m.ID, m.Folder, m.UID, m.Username
-	d.Tags = append([]string{}, m.Tags...)
-	d.Read = hasFlag(m.Flags, imap.SeenFlag)
+	d.Flags = append([]string{}, m.Flags...)
+	d.Read = hasFlag(m.Flags, string(imap.FlagSeen))
 	return d
 }
 
@@ -103,7 +101,7 @@ func (m *storedMessage) summary() messageSummary {
 	if len(snippet) > 250 {
 		snippet = snippet[:250]
 	}
-	return messageSummary{MailboxID: m.MailboxID, ID: d.ID, MessageID: d.MessageID, From: d.From, To: d.To, Cc: d.Cc, Bcc: d.Bcc, ReplyTo: d.ReplyTo, Subject: d.Subject, Snippet: string(snippet), Created: m.Created, Size: d.Size, Attachments: len(d.Attachments), Tags: d.Tags, Read: d.Read, Username: d.Username, Folder: d.Folder, UID: d.UID}
+	return messageSummary{MailboxID: m.MailboxID, ID: d.ID, MessageID: d.MessageID, From: d.From, To: d.To, Subject: d.Subject, Snippet: string(snippet), Created: m.Created, Size: d.Size, Attachments: len(d.Attachments), Read: d.Read, Username: d.Username, Folder: d.Folder, UID: d.UID}
 }
 
 func hasFlag(flags []string, flag string) bool {
@@ -116,7 +114,7 @@ func hasFlag(flags []string, flag string) bool {
 }
 
 func parseMessage(raw []byte, fallback time.Time, envelopeFrom string, envelopeTo []string) (messageDetail, map[string][]string, error) {
-	d := messageDetail{Date: fallback, Size: len(raw), From: &mail.Address{}, To: []*mail.Address{}, Cc: []*mail.Address{}, Bcc: []*mail.Address{}, ReplyTo: []*mail.Address{}, Tags: []string{}, Inline: []attachment{}, Attachments: []attachment{}}
+	d := messageDetail{Date: fallback, Size: len(raw), From: &address{}, To: []*address{}, Cc: []*address{}, Bcc: []*address{}, ReplyTo: []*address{}, Inline: []attachment{}, Attachments: []attachment{}}
 	headers := make(map[string][]string)
 	entity, err := message.Read(bytes.NewReader(raw))
 	if entity == nil || (err != nil && !message.IsUnknownCharset(err) && !message.IsUnknownEncoding(err)) {
@@ -129,13 +127,17 @@ func parseMessage(raw []byte, fallback time.Time, envelopeFrom string, envelopeT
 		}
 		headers[fields.Key()] = append(headers[fields.Key()], value)
 	}
-	addresses := func(name string) []*mail.Address {
+	addresses := func(name string) []*address {
 		text, _ := entity.Header.Text(name)
 		list, _ := mail.ParseAddressList(text)
 		if list == nil {
-			return []*mail.Address{}
+			return []*address{}
 		}
-		return list
+		out := make([]*address, 0, len(list))
+		for _, a := range list {
+			out = append(out, &address{Name: a.Name, Address: a.Address})
+		}
+		return out
 	}
 	if list := addresses("From"); len(list) > 0 {
 		d.From = list[0]
@@ -146,7 +148,7 @@ func parseMessage(raw []byte, fallback time.Time, envelopeFrom string, envelopeT
 	// SMTP envelope recipients omitted from visible headers are blind recipients.
 	for _, recipient := range envelopeTo {
 		found := false
-		for _, list := range [][]*mail.Address{d.To, d.Cc, d.Bcc} {
+		for _, list := range [][]*address{d.To, d.Cc, d.Bcc} {
 			for _, a := range list {
 				if strings.EqualFold(a.Address, recipient) {
 					found = true
@@ -154,7 +156,7 @@ func parseMessage(raw []byte, fallback time.Time, envelopeFrom string, envelopeT
 			}
 		}
 		if !found {
-			d.Bcc = append(d.Bcc, &mail.Address{Address: recipient})
+			d.Bcc = append(d.Bcc, &address{Address: recipient})
 		}
 	}
 	d.Subject, _ = entity.Header.Text("Subject")
@@ -166,7 +168,7 @@ func parseMessage(raw []byte, fallback time.Time, envelopeFrom string, envelopeT
 	if date, err := mail.ParseDate(entity.Header.Get("Date")); err == nil {
 		d.Date = date.UTC()
 	}
-	d.ListUnsubscribe = parseUnsubscribe(entity.Header.Get("List-Unsubscribe"), entity.Header.Get("List-Unsubscribe-Post"))
+
 	parts := 0
 	var walk func(*message.Entity, string, int) error
 	walk = func(e *message.Entity, path string, depth int) error {
@@ -218,7 +220,7 @@ func parseMessage(raw []byte, fallback time.Time, envelopeFrom string, envelopeT
 			}
 			return nil
 		}
-		a := attachment{PartID: strings.TrimPrefix(path, "0."), FileName: name, ContentType: media, ContentID: cid, Size: len(data), Data: data, Checksums: map[string]string{"MD5": fmt.Sprintf("%x", md5.Sum(data)), "SHA1": fmt.Sprintf("%x", sha1.Sum(data)), "SHA256": fmt.Sprintf("%x", sha256.Sum256(data))}}
+		a := attachment{PartID: strings.TrimPrefix(path, "0."), FileName: name, ContentType: media, ContentID: cid, Size: len(data)}
 		if disposition == "inline" || cid != "" {
 			d.Inline = append(d.Inline, a)
 		} else {
@@ -258,44 +260,52 @@ func htmlText(source string) string {
 	return strings.Join(strings.Fields(output.String()), " ")
 }
 
-func parseUnsubscribe(header, post string) unsubscribeInfo {
-	u := unsubscribeInfo{Header: header, HeaderPost: post, Links: []string{}}
-	var issues []string
-	if header == "" {
-		if post != "" {
-			u.Errors = "List-Unsubscribe-Post requires List-Unsubscribe"
-		}
-		return u
+// Only raw MIME and searchable text/metadata are cached; attachment payloads
+// are decoded on demand instead of being retained beside the raw message.
+func readMIMEPart(raw []byte, target string) ([]byte, error) {
+	root, err := message.Read(bytes.NewReader(raw))
+	if root == nil {
+		return nil, err
 	}
-	seen := map[string]bool{}
-	for _, part := range strings.Split(header, ",") {
-		part = strings.TrimSpace(part)
-		if !strings.HasPrefix(part, "<") || !strings.HasSuffix(part, ">") {
-			issues = append(issues, "links must be enclosed in angle brackets")
-			continue
+	var walk func(*message.Entity, string) ([]byte, error)
+	walk = func(e *message.Entity, path string) ([]byte, error) {
+		if strings.TrimPrefix(path, "0.") == target {
+			return io.ReadAll(io.LimitReader(e.Body, maxMessageBytes+1))
 		}
-		value := strings.Trim(part, "<>")
-		parsed, err := url.Parse(value)
-		if err != nil || !(parsed.Scheme == "https" || parsed.Scheme == "http" || parsed.Scheme == "mailto") {
-			issues = append(issues, "invalid unsubscribe URL")
-			continue
+		if r := e.MultipartReader(); r != nil {
+			defer r.Close()
+			for i := 1; ; i++ {
+				part, err := r.NextPart()
+				if err == io.EOF {
+					break
+				}
+				if part == nil {
+					return nil, err
+				}
+				data, err := walk(part, fmt.Sprintf("%s.%d", path, i))
+				if err != nil || data != nil {
+					return data, err
+				}
+			}
 		}
-		kind := parsed.Scheme
-		if kind == "http" {
-			kind = "https"
-		}
-		if seen[kind] {
-			issues = append(issues, "multiple links of the same type")
-		}
-		seen[kind] = true
-		u.Links = append(u.Links, value)
+		return nil, nil
 	}
-	if post != "" && post != "List-Unsubscribe=One-Click" {
-		issues = append(issues, "invalid one-click header")
+	return walk(root, "0")
+}
+func withEnvelope(d messageDetail, recipients []string) messageDetail {
+	d.Bcc = append([]*address{}, d.Bcc...)
+	for _, recipient := range recipients {
+		found := false
+		for _, list := range [][]*address{d.To, d.Cc, d.Bcc} {
+			for _, a := range list {
+				if strings.EqualFold(a.Address, recipient) {
+					found = true
+				}
+			}
+		}
+		if !found {
+			d.Bcc = append(d.Bcc, &address{Address: recipient})
+		}
 	}
-	if post != "" && !strings.Contains(header, "<https://") {
-		issues = append(issues, "one-click requires HTTPS")
-	}
-	u.Errors = strings.Join(issues, "; ")
-	return u
+	return d
 }

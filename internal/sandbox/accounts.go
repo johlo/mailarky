@@ -7,22 +7,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/emersion/go-imap"
-	"github.com/emersion/go-imap/backend"
 	"github.com/google/uuid"
 	bolt "go.etcd.io/bbolt"
 	"golang.org/x/crypto/bcrypt"
 )
 
-// Accounts have disjoint stores, UID spaces, toxic registries and notification
+// Accounts have disjoint stores, UID spaces, fault registries and notification
 // queues. Only routing and provisioning metadata is shared.
 type mailboxAccount struct {
 	ID           string    `json:"id"`
@@ -32,21 +29,33 @@ type mailboxAccount struct {
 	Created      time.Time `json:"created"`
 	PasswordHash string    `json:"password_hash,omitempty"`
 }
-type managedMailbox struct {
-	account mailboxAccount
-	store   *mailboxBackend
-	handler http.Handler
-	stop    func()
+
+// Service owns global configuration, routing, HTTP credentials and server faults.
+type Service struct {
+	mu           sync.RWMutex
+	config       configuration
+	entries      map[string]*Account
+	usernames    map[string]string
+	recipients   map[string]string
+	serverFaults *faultRegistry
+	httpUsers    credentials
+	ctx          context.Context
+	cancel       context.CancelFunc
+	closed       bool
 }
-type mailboxManager struct {
-	mu         sync.RWMutex
-	config     configuration
-	entries    map[string]*managedMailbox
-	usernames  map[string]string
-	recipients map[string]string
-	ctx        context.Context
-	cancel     context.CancelFunc
-	closed     bool
+
+// Account owns credentials, faults and notifications; Store owns persisted state.
+type Account struct {
+	*Store
+	service                                            *Service
+	identity                                           mailboxAccount
+	user                                               *mailboxUser
+	faults                                             *faultRegistry
+	notifier                                           *eventHub
+	stop                                               func()
+	afterAppend                                        func(*storedMessage)
+	started                                            time.Time
+	accepted, rejected, ignored, deleted, acceptedSize atomic.Uint64
 }
 type mailboxCreation struct {
 	Name       string   `json:"name"`
@@ -64,22 +73,28 @@ type mailboxDescription struct {
 	Password   string    `json:"password,omitempty"`
 }
 
-func openMailboxManager(ctx context.Context, c configuration) (*mailboxManager, error) {
+func openService(ctx context.Context, c configuration) (*Service, error) {
 	ctx, cancel := context.WithCancel(ctx)
-	h := &mailboxManager{config: c, entries: map[string]*managedMailbox{}, usernames: map[string]string{}, recipients: map[string]string{}, ctx: ctx, cancel: cancel}
-	b, err := openMailbox(c)
+	h := &Service{config: c, entries: map[string]*Account{}, usernames: map[string]string{}, recipients: map[string]string{}, ctx: ctx, cancel: cancel, serverFaults: newFaultRegistry()}
+	auth, err := readCredentials(c.HTTPAuthFile, c.HTTPAuth)
 	if err != nil {
 		cancel()
 		return nil, err
 	}
-	h.entries["default"] = &managedMailbox{account: mailboxAccount{ID: "default", Name: "default", Username: c.Username, Recipients: []string{}, Created: time.Now().UTC()}, store: b, stop: func() {}}
-	fail := func(err error) (*mailboxManager, error) { h.Close(); return nil, err }
-	a, err := h.openAccount(h.entries["default"].account, b)
+	h.httpUsers = auth
+	hash, err := bcrypt.GenerateFromPassword([]byte(c.Password), bcrypt.MinCost)
 	if err != nil {
-		return fail(err)
+		cancel()
+		return nil, err
 	}
-	h.entries["default"] = a
-	h.usernames[c.Username] = "default"
+	a, err := h.openAccount(mailboxAccount{ID: defaultAccountID, Name: defaultAccountID, Username: c.Username, Recipients: []string{}, Created: time.Now().UTC(), PasswordHash: string(hash)})
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	h.register(a)
+	b := a.Store
+	fail := func(err error) (*Service, error) { h.Close(); return nil, err }
 	var saved []mailboxAccount
 	if b.db != nil {
 		err = b.db.View(func(tx *bolt.Tx) error {
@@ -115,7 +130,7 @@ func openMailboxManager(ctx context.Context, c configuration) (*mailboxManager, 
 		if _, err := os.Stat(h.databasePath(account.ID)); err != nil {
 			return fail(fmt.Errorf("persisted mailbox %s database missing: %w", account.ID, err))
 		}
-		m, err := h.openAccount(account, nil)
+		m, err := h.openAccount(account)
 		if err != nil {
 			return fail(err)
 		}
@@ -123,41 +138,66 @@ func openMailboxManager(ctx context.Context, c configuration) (*mailboxManager, 
 	}
 	return h, nil
 }
-func (h *mailboxManager) databasePath(id string) string {
+func (h *Service) databasePath(id string) string {
 	if h.config.Database == "" {
 		return ""
 	}
 	return filepath.Join(h.config.Database+".mailboxes", id+".db")
 }
-func (h *mailboxManager) openAccount(account mailboxAccount, b *mailboxBackend) (*managedMailbox, error) {
+func (h *Service) openAccount(identity mailboxAccount) (*Account, error) {
 	c := h.config
-	c.Webroot = ""
-	if b == nil {
-		c.MailboxID = account.ID
-		c.Username = account.Username
-		c.Password = account.PasswordHash
-		c.Database = h.databasePath(account.ID)
-		if c.DumpPath != "" {
-			c.DumpPath = filepath.Join(c.DumpPath, account.ID)
-		}
-		var err error
-		b, err = openMailbox(c)
-		if err != nil {
-			return nil, err
-		}
+	path := h.databasePath(identity.ID)
+	dump := c.DumpPath
+	if identity.ID == defaultAccountID {
+		path = c.Database
+	} else if dump != "" {
+		dump = filepath.Join(dump, identity.ID)
 	}
-	// A scoped handler has the usual paths without the outer service webroot.
-	api, err := newAPI(b)
+	store, err := openStore(storeOptions{MailboxID: identity.ID, Database: path, SMTPFolder: c.SMTPFolder, MaxMessages: c.MaxMessages, MaxAge: c.MaxAge, MaxSize: c.MaxSize, IgnoreDuplicates: c.IgnoreDuplicates, DumpPath: dump})
 	if err != nil {
-		b.Close()
 		return nil, err
 	}
-	api.webrootOverride = new(string)
-	return &managedMailbox{account: account, store: b, handler: api.handler(), stop: b.startWorkers(h.ctx)}, nil
+	a := &Account{Store: store, service: h, identity: identity, faults: newFaultRegistry(), notifier: newEventHub(), started: time.Now()}
+	a.user = &mailboxUser{store: a}
+	store.onChange = a.changed
+	a.stop = a.startWorkers(h.ctx)
+	return a, nil
 }
-func (h *mailboxManager) available(a mailboxAccount) error {
+
+func (a *Account) Close() error {
+	a.stop()
+	err := a.Store.Close()
+	a.notifier.close()
+	return err
+}
+func (a *Account) append(raw []byte, options appendOptions) (*storedMessage, error) {
+	m, created, err := a.Store.append(raw, options)
+	if err == nil && !created {
+		a.ignored.Add(1)
+	}
+	if err == nil && created && options.Notify && a.afterAppend != nil {
+		a.afterAppend(m)
+	}
+	return m, err
+}
+func (a *Account) changed(before, after storeState) {
+	for id, m := range after.Messages {
+		if before.Messages[id] == nil {
+			a.notifier.publish(notification{"new", m.summary()})
+		} else if before.Messages[id] != m {
+			a.notifier.publish(notification{"update", m.summary()})
+		}
+	}
+	for id := range before.Messages {
+		if after.Messages[id] == nil {
+			a.deleted.Add(1)
+			a.notifier.publish(notification{"delete", map[string]string{"id": id}})
+		}
+	}
+}
+func (h *Service) available(a mailboxAccount) error {
 	for _, m := range h.entries {
-		if m.account.Name == a.Name {
+		if m.identity.Name == a.Name {
 			return errors.New("mailbox name already exists")
 		}
 	}
@@ -171,17 +211,17 @@ func (h *mailboxManager) available(a mailboxAccount) error {
 	}
 	return nil
 }
-func (h *mailboxManager) register(m *managedMailbox) {
-	h.entries[m.account.ID] = m
-	h.usernames[m.account.Username] = m.account.ID
-	for _, recipient := range m.account.Recipients {
-		h.recipients[recipient] = m.account.ID
+func (h *Service) register(m *Account) {
+	h.entries[m.identity.ID] = m
+	h.usernames[m.identity.Username] = m.identity.ID
+	for _, recipient := range m.identity.Recipients {
+		h.recipients[recipient] = m.identity.ID
 	}
 }
-func (h *mailboxManager) description(a mailboxAccount) mailboxDescription {
-	return mailboxDescription{ID: a.ID, Name: a.Name, Username: a.Username, Recipients: append([]string{}, a.Recipients...), Created: a.Created, APIBase: h.prefix() + "/mailboxes/" + a.ID}
+func (h *Service) description(a mailboxAccount) mailboxDescription {
+	return mailboxDescription{ID: a.ID, Name: a.Name, Username: a.Username, Recipients: append([]string{}, a.Recipients...), Created: a.Created, APIBase: h.config.Webroot + "/api/v1/accounts/" + a.ID}
 }
-func (h *mailboxManager) create(req mailboxCreation) (mailboxDescription, error) {
+func (h *Service) create(req mailboxCreation) (mailboxDescription, error) {
 	id := uuid.NewString()
 	if req.Name == "" {
 		req.Name = id
@@ -221,7 +261,7 @@ func (h *mailboxManager) create(req mailboxCreation) (mailboxDescription, error)
 		seen[address] = true
 		recipients = append(recipients, address)
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.MinCost)
 	if err != nil {
 		return mailboxDescription{}, err
 	}
@@ -234,11 +274,11 @@ func (h *mailboxManager) create(req mailboxCreation) (mailboxDescription, error)
 	if err := h.available(account); err != nil {
 		return mailboxDescription{}, err
 	}
-	m, err := h.openAccount(account, nil)
+	m, err := h.openAccount(account)
 	if err != nil {
 		return mailboxDescription{}, err
 	}
-	if db := h.entries["default"].store.db; db != nil {
+	if db := h.entries[defaultAccountID].db; db != nil {
 		err = db.Update(func(tx *bolt.Tx) error {
 			bucket, err := tx.CreateBucketIfNotExists([]byte("mailbox_accounts"))
 			if err != nil {
@@ -259,7 +299,7 @@ func (h *mailboxManager) create(req mailboxCreation) (mailboxDescription, error)
 		})
 		if err != nil {
 			m.stop()
-			m.store.Close()
+			m.Close()
 			os.Remove(h.databasePath(id))
 			return mailboxDescription{}, err
 		}
@@ -269,7 +309,7 @@ func (h *mailboxManager) create(req mailboxCreation) (mailboxDescription, error)
 	result.Password = req.Password
 	return result, nil
 }
-func (h *mailboxManager) lookup(id string) *managedMailbox {
+func (h *Service) lookup(id string) *Account {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	if h.closed {
@@ -277,7 +317,7 @@ func (h *mailboxManager) lookup(id string) *managedMailbox {
 	}
 	return h.entries[id]
 }
-func (h *mailboxManager) route(recipient string) *mailboxBackend {
+func (h *Service) route(recipient string) *Account {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	if h.closed {
@@ -288,37 +328,33 @@ func (h *mailboxManager) route(recipient string) *mailboxBackend {
 		return nil
 	}
 	if !known {
-		id = "default"
+		id = defaultAccountID
 	}
-	return h.entries[id].store
+	return h.entries[id]
 }
-func (h *mailboxManager) Login(info *imap.ConnInfo, username, password string) (backend.User, error) {
-	h.mu.RLock()
-	if h.closed {
-		h.mu.RUnlock()
-		return nil, backend.ErrInvalidCredentials
-	}
-	id := h.usernames[username]
-	m := h.entries[id]
-	h.mu.RUnlock()
-	if m == nil {
-		return nil, backend.ErrInvalidCredentials
-	}
-	if id == "default" {
-		return m.store.Login(info, username, password)
-	}
-	if bcrypt.CompareHashAndPassword([]byte(m.account.PasswordHash), []byte(password)) != nil {
-		return nil, backend.ErrInvalidCredentials
+func (h *Service) authenticate(username, password string) *Account {
+	a := h.accountByUsername(username)
+	if a == nil || bcrypt.CompareHashAndPassword([]byte(a.identity.PasswordHash), []byte(password)) != nil {
+		return nil
 	}
 	select {
-	case <-m.store.done:
-		return nil, backend.ErrInvalidCredentials
+	case <-a.done:
+		return nil
 	default:
+		return a
 	}
-	return m.store.user, nil
 }
-func (h *mailboxManager) remove(id string) error {
-	if id == "default" {
+
+func (h *Service) accountByUsername(username string) *Account {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if h.closed {
+		return nil
+	}
+	return h.entries[h.usernames[username]]
+}
+func (h *Service) remove(id string) error {
+	if id == defaultAccountID {
 		return errors.New("the default mailbox cannot be deleted")
 	}
 	h.mu.Lock()
@@ -327,13 +363,13 @@ func (h *mailboxManager) remove(id string) error {
 		h.mu.Unlock()
 		return errors.New("mailbox not found")
 	}
-	if db := h.entries["default"].store.db; db != nil {
+	if db := h.entries[defaultAccountID].db; db != nil {
 		if err := db.Update(func(tx *bolt.Tx) error {
 			retired, err := tx.CreateBucketIfNotExists([]byte("mailbox_retired"))
 			if err != nil {
 				return err
 			}
-			for _, recipient := range m.account.Recipients {
+			for _, recipient := range m.identity.Recipients {
 				if err := retired.Put([]byte(recipient), []byte{1}); err != nil {
 					return err
 				}
@@ -345,13 +381,12 @@ func (h *mailboxManager) remove(id string) error {
 		}
 	}
 	delete(h.entries, id)
-	delete(h.usernames, m.account.Username)
-	for _, recipient := range m.account.Recipients {
+	delete(h.usernames, m.identity.Username)
+	for _, recipient := range m.identity.Recipients {
 		h.recipients[recipient] = ""
 	}
 	h.mu.Unlock()
-	m.stop()
-	if err := m.store.Close(); err != nil {
+	if err := m.Close(); err != nil {
 		return err
 	}
 	if path := h.databasePath(id); path != "" {
@@ -361,7 +396,7 @@ func (h *mailboxManager) remove(id string) error {
 	}
 	return nil
 }
-func (h *mailboxManager) Close() error {
+func (h *Service) Close() error {
 	h.mu.Lock()
 	if h.closed {
 		h.mu.Unlock()
@@ -373,70 +408,7 @@ func (h *mailboxManager) Close() error {
 	h.mu.Unlock()
 	var errs []error
 	for _, m := range entries {
-		m.stop()
-		errs = append(errs, m.store.Close())
+		errs = append(errs, m.Close())
 	}
 	return errors.Join(errs...)
-}
-func (a *httpAPI) listMailboxes(w http.ResponseWriter, r *http.Request) {
-	h := a.manager
-	h.mu.RLock()
-	out := []mailboxDescription{}
-	for _, m := range h.entries {
-		out = append(out, h.description(m.account))
-	}
-	h.mu.RUnlock()
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	jsonResponse(w, 200, out)
-}
-func (a *httpAPI) createMailbox(w http.ResponseWriter, r *http.Request) {
-	var req mailboxCreation
-	if err := decodeJSON(w, r, 64<<10, &req); err != nil {
-		apiError(w, 400, err)
-		return
-	}
-	result, err := a.manager.create(req)
-	if err != nil {
-		apiError(w, 400, err)
-		return
-	}
-	jsonResponse(w, 201, result)
-}
-func (a *httpAPI) getMailbox(w http.ResponseWriter, r *http.Request) {
-	m := a.manager.lookup(r.PathValue("mailbox"))
-	if m == nil {
-		apiError(w, 404, errors.New("mailbox not found"))
-		return
-	}
-	jsonResponse(w, 200, a.manager.description(m.account))
-}
-func (a *httpAPI) deleteMailbox(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("mailbox")
-	if a.manager.lookup(id) == nil {
-		apiError(w, 404, errors.New("mailbox not found"))
-		return
-	}
-	if err := a.manager.remove(id); err != nil {
-		apiError(w, 400, err)
-		return
-	}
-	w.WriteHeader(204)
-}
-func (a *httpAPI) scopedMailbox(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("mailbox")
-	m := a.manager.lookup(id)
-	if m == nil {
-		apiError(w, 404, errors.New("mailbox not found"))
-		return
-	}
-	prefix := a.manager.prefix() + "/mailboxes/" + id
-	http.StripPrefix(prefix, m.handler).ServeHTTP(w, r)
-}
-
-func (h *mailboxManager) prefix() string {
-	root := strings.Trim(h.config.Webroot, "/")
-	if root == "" {
-		return ""
-	}
-	return "/" + root
 }

@@ -3,50 +3,28 @@ package sandbox
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"mime"
-	"net"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/emersion/go-imap"
-	"github.com/emersion/go-imap/backend/backendutil"
+	"github.com/johlo/go-imap/v2"
 )
 
-type httpAPI struct {
-	store           *mailboxBackend
-	auth, sendAuth  credentials
-	manager         *mailboxManager
-	webrootOverride *string
-}
+type httpAPI struct{ service *Service }
+type accountAPI struct{ account *Account }
 
-func (a *httpAPI) webroot() string {
-	if a.webrootOverride != nil {
-		return *a.webrootOverride
-	}
-	return a.store.config.Webroot
-}
-
-func newAPI(store *mailboxBackend) (*httpAPI, error) {
-	auth, err := readCredentials(store.config.HTTPAuthFile, store.config.HTTPAuth)
-	if err != nil {
-		return nil, err
-	}
-	send, err := readCredentials(store.config.SendAuthFile, store.config.SendAuth)
-	if err != nil {
-		return nil, err
-	}
-	return &httpAPI{store: store, auth: auth, sendAuth: send}, nil
-}
+func newAPI(service *Service) *httpAPI { return &httpAPI{service: service} }
 func jsonResponse(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(value)
+	_ = json.NewEncoder(w).Encode(value)
 }
-func apiError(w http.ResponseWriter, status int, err error) { http.Error(w, err.Error(), status) }
+func apiError(w http.ResponseWriter, status int, err error) {
+	jsonResponse(w, status, map[string]string{"error": err.Error()})
+}
 func decodeJSON(w http.ResponseWriter, r *http.Request, size int64, value any) error {
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, size))
 	decoder.DisallowUnknownFields()
@@ -59,165 +37,162 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, size int64, value any) e
 	}
 	return nil
 }
-
+func (a *httpAPI) withAccount(fn func(*accountAPI, http.ResponseWriter, *http.Request)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		account := a.service.lookup(r.PathValue("account"))
+		if account == nil {
+			apiError(w, 404, errors.New("account not found"))
+			return
+		}
+		fn(&accountAPI{account: account}, w, r)
+	}
+}
 func (a *httpAPI) handler() http.Handler {
 	mux := http.NewServeMux()
-	if a.manager != nil {
-		mux.HandleFunc("GET /api/v1/mailboxes", a.listMailboxes)
-		mux.HandleFunc("POST /api/v1/mailboxes", a.createMailbox)
-		mux.HandleFunc("GET /api/v1/mailboxes/{mailbox}", a.getMailbox)
-		mux.HandleFunc("DELETE /api/v1/mailboxes/{mailbox}", a.deleteMailbox)
-	}
-	for _, path := range []string{"/healthz", "/livez", "/readyz"} {
-		mux.HandleFunc("GET "+path, func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok\n")) })
-	}
-	mux.HandleFunc("POST /messages", a.fixture)
-	mux.HandleFunc("GET /api/v1/messages", a.messages)
-	mux.HandleFunc("GET /api/v1/search", a.messages)
-	mux.HandleFunc("DELETE /api/v1/search", a.deleteSearch)
-	mux.HandleFunc("DELETE /api/v1/messages", a.deleteMessages)
-	mux.HandleFunc("PUT /api/v1/messages", a.readMessages)
-	mux.HandleFunc("GET /api/v1/message/{id}", a.message)
-	mux.HandleFunc("GET /api/v1/message/{id}/raw", a.raw)
-	mux.HandleFunc("GET /api/v1/message/{id}/headers", a.headers)
-	mux.HandleFunc("GET /api/v1/message/{id}/part/{part}", a.part)
-	mux.HandleFunc("GET /api/v1/message/{id}/part/{part}/thumb", a.thumbnail)
-	mux.HandleFunc("GET /api/v1/message/{id}/link-check", a.linkCheck)
-	mux.HandleFunc("GET /api/v1/message/{id}/html-check", a.htmlCheck)
-	mux.HandleFunc("GET /api/v1/message/{id}/sa-check", a.spamCheck)
-	mux.HandleFunc("POST /api/v1/send", a.send)
-	mux.HandleFunc("POST /api/v1/messages/raw", a.importRaw)
-	mux.HandleFunc("GET /api/v1/tags", a.tags)
-	mux.HandleFunc("PUT /api/v1/tags", a.setTags)
-	mux.HandleFunc("PUT /api/v1/tags/{tag}", a.renameTag)
-	mux.HandleFunc("DELETE /api/v1/tags/{tag}", a.removeTag)
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { jsonResponse(w, 200, map[string]string{"status": "ok"}) })
 	mux.HandleFunc("GET /api/v1/info", a.info)
-	mux.HandleFunc("GET /api/v1/webui", a.capabilities)
-	mux.HandleFunc("GET /api/v1/toxics", a.listToxics)
-	mux.HandleFunc("POST /api/v1/toxics", a.createToxic)
-	mux.HandleFunc("GET /api/v1/toxics/{name}", a.getToxic)
-	mux.HandleFunc("PUT /api/v1/toxics/{name}", a.updateToxic)
-	mux.HandleFunc("PATCH /api/v1/toxics/{name}", a.toggleToxic)
-	mux.HandleFunc("DELETE /api/v1/toxics/{name}", a.deleteToxic)
-	// Legacy global chaos cannot isolate concurrent tests. Make this explicit,
-	// rather than silently accepting a configuration that affects everyone.
-	mux.HandleFunc("GET /api/v1/chaos", func(w http.ResponseWriter, r *http.Request) {
-		jsonResponse(w, 200, map[string]any{"Enabled": false, "MessageScoped": true, "Toxics": "/api/v1/toxics"})
-	})
-	mux.HandleFunc("PUT /api/v1/chaos", func(w http.ResponseWriter, r *http.Request) {
-		apiError(w, 400, errors.New("global SMTP chaos is disabled; create a message-scoped toxic at /api/v1/toxics"))
-	})
-	mux.HandleFunc("GET /api/v1/folders", a.folders)
-	mux.HandleFunc("POST /api/v1/folders", a.createFolder)
-	mux.HandleFunc("GET /api/events", a.events)
+	mux.HandleFunc("GET /api/v1/accounts", a.listAccounts)
+	mux.HandleFunc("POST /api/v1/accounts", a.createAccount)
+	mux.HandleFunc("GET /api/v1/accounts/{account}", a.withAccount((*accountAPI).description))
+	mux.HandleFunc("DELETE /api/v1/accounts/{account}", a.deleteAccount)
+	mux.HandleFunc("GET /api/v1/accounts/{account}/messages", a.withAccount((*accountAPI).messages))
+	mux.HandleFunc("POST /api/v1/accounts/{account}/messages", a.withAccount((*accountAPI).createMessage))
+	mux.HandleFunc("DELETE /api/v1/accounts/{account}/messages", a.withAccount((*accountAPI).deleteMessages))
+	mux.HandleFunc("GET /api/v1/accounts/{account}/messages/{id}", a.withAccount((*accountAPI).message))
+	mux.HandleFunc("PATCH /api/v1/accounts/{account}/messages/{id}", a.withAccount((*accountAPI).setFlags))
+	mux.HandleFunc("DELETE /api/v1/accounts/{account}/messages/{id}", a.withAccount((*accountAPI).deleteMessage))
+	mux.HandleFunc("GET /api/v1/accounts/{account}/messages/{id}/raw", a.withAccount((*accountAPI).raw))
+	mux.HandleFunc("GET /api/v1/accounts/{account}/messages/{id}/headers", a.withAccount((*accountAPI).headers))
+	mux.HandleFunc("GET /api/v1/accounts/{account}/messages/{id}/parts/{part}", a.withAccount((*accountAPI).part))
+	mux.HandleFunc("GET /api/v1/accounts/{account}/messages/{id}/view", a.withAccount((*accountAPI).view))
+	mux.HandleFunc("GET /api/v1/accounts/{account}/folders", a.withAccount((*accountAPI).folders))
+	mux.HandleFunc("POST /api/v1/accounts/{account}/folders", a.withAccount((*accountAPI).createFolder))
+	mux.HandleFunc("GET /api/v1/accounts/{account}/events", a.withAccount((*accountAPI).events))
 	mux.HandleFunc("GET /metrics", a.metrics)
-	mux.HandleFunc("GET /view/{file}", a.view)
+	for _, prefix := range []string{"/api/v1/faults", "/api/v1/accounts/{account}/faults"} {
+		mux.HandleFunc("GET "+prefix, a.faults)
+		mux.HandleFunc("POST "+prefix, a.faults)
+		mux.HandleFunc("GET "+prefix+"/{name}", a.faults)
+		mux.HandleFunc("PUT "+prefix+"/{name}", a.faults)
+		mux.HandleFunc("PATCH "+prefix+"/{name}", a.faults)
+		mux.HandleFunc("DELETE "+prefix+"/{name}", a.faults)
+	}
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		jsonResponse(w, 200, map[string]any{"service": "mail-sandbox", "protocols": []string{"smtp", "imap", "http"}, "api": "/api/v1/messages"})
+		jsonResponse(w, 200, map[string]any{"service": "mailarky", "api": a.service.config.Webroot + "/api/v1/accounts", "protocols": []string{"smtp", "imap", "http"}})
 	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { apiError(w, 404, errors.New("endpoint not found")) })
 	var handler http.Handler = mux
-	root := strings.Trim(a.webroot(), "/")
-	if root != "" {
-		handler = http.StripPrefix("/"+root, mux)
+	if root := a.service.config.Webroot; root != "" {
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != root && !strings.HasPrefix(r.URL.Path, root+"/") {
+				apiError(w, 404, errors.New("endpoint not found"))
+				return
+			}
+			http.StripPrefix(root, mux).ServeHTTP(w, r)
+		})
 	}
-	handler = a.middleware(handler)
-	if a.manager != nil {
-		outer := http.NewServeMux()
-		prefix := ""
-		if root != "" {
-			prefix = "/" + root
-		}
-		outer.HandleFunc(prefix+"/mailboxes/{mailbox}/", a.scopedMailbox)
-		outer.Handle("/", handler)
-		return outer
-	}
-	return handler
+	return a.middleware(handler)
 }
-
 func (a *httpAPI) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		c := a.store.config
-		if c.AllowedHosts != "" {
-			host := r.Host
-			if h, _, err := net.SplitHostPort(host); err == nil {
-				host = h
-			}
-			allowed := false
-			for _, candidate := range strings.Split(c.AllowedHosts, ",") {
-				if strings.EqualFold(strings.TrimSpace(candidate), host) {
-					allowed = true
-				}
-			}
-			if !allowed {
-				apiError(w, 403, errors.New("host is not allowed"))
+		if r.URL.Path != a.service.config.Webroot+"/healthz" && len(a.service.httpUsers) > 0 {
+			username, password, ok := r.BasicAuth()
+			if !ok || !a.service.httpUsers.valid(username, password) {
+				w.Header().Set("WWW-Authenticate", `Basic realm="mailarky"`)
+				apiError(w, 401, errors.New("authentication required"))
 				return
-			}
-		}
-		if origin := r.Header.Get("Origin"); origin != "" && c.CORS != "" {
-			for _, candidate := range strings.Split(c.CORS, ",") {
-				if candidate == "*" || strings.TrimSpace(candidate) == origin {
-					w.Header().Set("Access-Control-Allow-Origin", origin)
-					w.Header().Set("Vary", "Origin")
-					w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-					w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-					break
-				}
-			}
-		}
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(204)
-			return
-		}
-		path := strings.TrimPrefix(r.URL.Path, "/"+strings.Trim(a.webroot(), "/"))
-		if !strings.HasPrefix(path, "/") {
-			path = "/" + path
-		}
-		if path != "/healthz" && path != "/livez" && path != "/readyz" {
-			users := a.auth
-			acceptAny := false
-			if path == "/api/v1/send" && (len(a.sendAuth) > 0 || c.SendAcceptAny) {
-				users = a.sendAuth
-				acceptAny = c.SendAcceptAny
-			}
-			if len(users) > 0 || acceptAny {
-				user, password, ok := r.BasicAuth()
-				if !ok || (!acceptAny && !users.valid(user, password)) {
-					w.Header().Set("WWW-Authenticate", `Basic realm="mail-sandbox"`)
-					apiError(w, 401, errors.New("authentication required"))
-					return
-				}
 			}
 		}
 		next.ServeHTTP(w, r)
 	})
 }
+func (a *httpAPI) listAccounts(w http.ResponseWriter, r *http.Request) {
+	h := a.service
+	h.mu.RLock()
+	out := []mailboxDescription{}
+	for _, account := range h.entries {
+		out = append(out, h.description(account.identity))
+	}
+	h.mu.RUnlock()
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	jsonResponse(w, 200, out)
+}
+func (a *httpAPI) createAccount(w http.ResponseWriter, r *http.Request) {
+	var req mailboxCreation
+	if err := decodeJSON(w, r, 64<<10, &req); err != nil {
+		apiError(w, 400, err)
+		return
+	}
+	result, err := a.service.create(req)
+	if err != nil {
+		apiError(w, 400, err)
+		return
+	}
+	jsonResponse(w, 201, result)
+}
+func (a *accountAPI) description(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, 200, a.account.service.description(a.account.identity))
+}
+func (a *httpAPI) deleteAccount(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("account")
+	if a.service.lookup(id) == nil {
+		apiError(w, 404, errors.New("account not found"))
+		return
+	}
+	if err := a.service.remove(id); err != nil {
+		apiError(w, 400, err)
+		return
+	}
+	w.WriteHeader(204)
+}
 
-func (a *httpAPI) fixture(w http.ResponseWriter, r *http.Request) {
-	var req messageRequest
-	if err := decodeJSON(w, r, 1<<20, &req); err != nil {
-		apiError(w, 400, errors.New("invalid message JSON"))
+func (a *accountAPI) createMessage(w http.ResponseWriter, r *http.Request) {
+	media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil {
+		apiError(w, 415, errors.New("Content-Type must be application/json or message/rfc822"))
 		return
 	}
-	if req.Folder == "" {
-		req.Folder = "INBOX"
-	}
-	if _, err := a.store.user.GetMailbox(req.Folder); err != nil {
-		apiError(w, 400, errors.New("folder does not exist"))
+	var raw []byte
+	options := appendOptions{Folder: "INBOX", Notify: true}
+	switch media {
+	case "application/json":
+		var req messageRequest
+		if err := decodeJSON(w, r, a.account.options.MaxSize, &req); err != nil {
+			apiError(w, 400, err)
+			return
+		}
+		if req.Folder != "" {
+			options.Folder = req.Folder
+		}
+		options.Flags = req.Flags
+		source, date, err := req.rawMessage()
+		if err != nil {
+			apiError(w, 400, err)
+			return
+		}
+		raw = []byte(source)
+		options.Date = date
+	case "message/rfc822":
+		raw, err = io.ReadAll(http.MaxBytesReader(w, r.Body, a.account.options.MaxSize))
+		if err != nil {
+			apiError(w, 400, err)
+			return
+		}
+		if folder := r.URL.Query().Get("folder"); folder != "" {
+			options.Folder = folder
+		}
+	default:
+		apiError(w, 415, errors.New("Content-Type must be application/json or message/rfc822"))
 		return
 	}
-	raw, date, err := req.rawMessage()
+	m, err := a.account.append(raw, options)
 	if err != nil {
 		apiError(w, 400, err)
 		return
 	}
-	m, err := a.store.append([]byte(raw), appendOptions{Folder: req.Folder, Date: date, Flags: req.Flags, Notify: true})
-	if err != nil {
-		apiError(w, 400, err)
-		return
-	}
-	jsonResponse(w, 201, map[string]string{"folder": m.Folder, "message_id": m.Detail.MessageID})
+	jsonResponse(w, 201, m.detail())
 }
 
 type messagesSummary struct {
@@ -225,39 +200,34 @@ type messagesSummary struct {
 	Start       int              `json:"start"`
 	Total       int              `json:"total"`
 	Unread      int              `json:"unread"`
-	Count       int              `json:"messages_count"`
-	UnreadCount int              `json:"messages_unread"`
-	Tags        []string         `json:"tags"`
+	Count       int              `json:"matched"`
+	UnreadCount int              `json:"matched_unread"`
 }
 
-func (a *httpAPI) messages(w http.ResponseWriter, r *http.Request) {
+func (a *accountAPI) messages(w http.ResponseWriter, r *http.Request) {
 	predicate, err := compileSearch(r.URL.Query().Get("query"), r.URL.Query().Get("tz"))
 	if err != nil {
 		apiError(w, 400, err)
 		return
 	}
 	start, limit := 0, 50
-	for key, pointer := range map[string]*int{"start": &start, "limit": &limit} {
+	for key, p := range map[string]*int{"start": &start, "limit": &limit} {
 		if raw := r.URL.Query().Get(key); raw != "" {
-			value, err := strconv.Atoi(raw)
-			if err != nil || value < 0 || (key == "limit" && (value == 0 || value > 10000)) {
+			n, err := strconv.Atoi(raw)
+			if err != nil || n < 0 || (key == "limit" && (n == 0 || n > 10000)) {
 				apiError(w, 400, errors.New("invalid pagination"))
 				return
 			}
-			*pointer = value
+			*p = n
 		}
 	}
-	list := a.store.snapshot()
-	result := messagesSummary{Messages: []messageSummary{}, Start: start, Total: len(list), Tags: []string{}}
-	tags := map[string]bool{}
+	list := a.account.snapshot()
+	result := messagesSummary{Messages: []messageSummary{}, Start: start, Total: len(list)}
 	for i := len(list) - 1; i >= 0; i-- {
 		m := list[i]
-		unread := !hasFlag(m.Flags, imap.SeenFlag)
+		unread := !hasFlag(m.Flags, string(imap.FlagSeen))
 		if unread {
 			result.Unread++
-		}
-		for _, tag := range m.Tags {
-			tags[tag] = true
 		}
 		if !predicate(m) {
 			continue
@@ -270,97 +240,80 @@ func (a *httpAPI) messages(w http.ResponseWriter, r *http.Request) {
 		}
 		result.Count++
 	}
-	for tag := range tags {
-		result.Tags = append(result.Tags, tag)
-	}
-	sort.Strings(result.Tags)
 	jsonResponse(w, 200, result)
 }
-func (a *httpAPI) requireMessage(w http.ResponseWriter, r *http.Request) *storedMessage {
-	m := a.store.get(r.PathValue("id"))
+func (a *accountAPI) requireMessage(w http.ResponseWriter, r *http.Request) *storedMessage {
+	m := a.account.get(r.PathValue("id"))
 	if m == nil {
 		apiError(w, 404, errors.New("message not found"))
 	}
 	return m
 }
-func (a *httpAPI) message(w http.ResponseWriter, r *http.Request) {
-	m := a.requireMessage(w, r)
-	if m == nil {
-		return
+func (a *accountAPI) message(w http.ResponseWriter, r *http.Request) {
+	if m := a.requireMessage(w, r); m != nil {
+		jsonResponse(w, 200, m.detail())
 	}
-	if err := a.setRead([]string{m.ID}, true); err != nil {
-		apiError(w, 500, err)
-		return
-	}
-	m.Flags = backendutil.UpdateFlags(m.Flags, imap.AddFlags, []string{imap.SeenFlag})
-	jsonResponse(w, 200, m.detail())
 }
-func (a *httpAPI) raw(w http.ResponseWriter, r *http.Request) {
-	m := a.requireMessage(w, r)
-	if m == nil {
-		return
+func (a *accountAPI) raw(w http.ResponseWriter, r *http.Request) {
+	if m := a.requireMessage(w, r); m != nil {
+		w.Header().Set("Content-Type", "message/rfc822")
+		_, _ = w.Write(m.Raw)
 	}
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Write(m.Raw)
 }
-func (a *httpAPI) headers(w http.ResponseWriter, r *http.Request) {
-	m := a.requireMessage(w, r)
-	if m != nil {
+func (a *accountAPI) headers(w http.ResponseWriter, r *http.Request) {
+	if m := a.requireMessage(w, r); m != nil {
 		jsonResponse(w, 200, m.Headers)
 	}
 }
-func (a *httpAPI) part(w http.ResponseWriter, r *http.Request) {
+func (a *accountAPI) part(w http.ResponseWriter, r *http.Request) {
 	m := a.requireMessage(w, r)
 	if m == nil {
 		return
 	}
-	for _, part := range append(m.Detail.Attachments, m.Detail.Inline...) {
-		if part.PartID == r.PathValue("part") {
-			w.Header().Set("Content-Type", part.ContentType)
-			w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": part.FileName}))
-			w.Write(part.Data)
-			return
+	for _, parts := range [][]attachment{m.Detail.Attachments, m.Detail.Inline} {
+		for _, part := range parts {
+			if part.PartID == r.PathValue("part") {
+				data, err := readMIMEPart(m.Raw, part.PartID)
+				if err != nil {
+					apiError(w, 500, err)
+					return
+				}
+				w.Header().Set("Content-Type", part.ContentType)
+				w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": part.FileName}))
+				_, _ = w.Write(data)
+				return
+			}
 		}
 	}
 	apiError(w, 404, errors.New("MIME part not found"))
 }
-
-func (a *httpAPI) remove(ids []string) error {
-	return a.store.mutate(func(s *storeState) error {
-		for _, id := range ids {
-			if s.Messages[id] == nil {
-				return fmt.Errorf("message %s not found", id)
-			}
-		}
-		for _, id := range ids {
-			delete(s.Messages, id)
-		}
-		return nil
-	})
+func (a *accountAPI) view(w http.ResponseWriter, r *http.Request) {
+	m := a.requireMessage(w, r)
+	if m == nil {
+		return
+	}
+	if r.URL.Query().Get("format") == "text" {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = io.WriteString(w, m.Detail.Text)
+	} else {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:")
+		_, _ = io.WriteString(w, m.Detail.HTML)
+	}
 }
-func (a *httpAPI) deleteMessages(w http.ResponseWriter, r *http.Request) {
-	var body struct{ IDs []string }
-	if r.ContentLength != 0 {
+func (a *accountAPI) deleteMessages(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		IDs []string `json:"ids"`
+	}
+	if r.Body != nil && r.ContentLength != 0 {
 		if err := decodeJSON(w, r, 1<<20, &body); err != nil {
 			apiError(w, 400, err)
 			return
 		}
 	}
-	if len(body.IDs) == 0 {
-		for _, m := range a.store.snapshot() {
-			body.IDs = append(body.IDs, m.ID)
-		}
-	}
-	if err := a.remove(body.IDs); err != nil {
-		apiError(w, 400, err)
-		return
-	}
-	w.Write([]byte("ok\n"))
-}
-func (a *httpAPI) deleteSearch(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("query")
-	if strings.TrimSpace(query) == "" {
-		apiError(w, 400, errors.New("query is required"))
+	if len(body.IDs) > 0 && query != "" {
+		apiError(w, 400, errors.New("use ids or query"))
 		return
 	}
 	predicate, err := compileSearch(query, r.URL.Query().Get("tz"))
@@ -368,249 +321,81 @@ func (a *httpAPI) deleteSearch(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, err)
 		return
 	}
-	var ids []string
-	for _, m := range a.store.snapshot() {
-		if predicate(m) {
-			ids = append(ids, m.ID)
-		}
+	ids := map[string]bool{}
+	for _, id := range body.IDs {
+		ids[id] = true
 	}
-	if err := a.remove(ids); err != nil {
-		apiError(w, 500, err)
-		return
-	}
-	w.Write([]byte("ok\n"))
-}
-func (a *httpAPI) setRead(ids []string, read bool) error {
-	return a.store.mutate(func(s *storeState) error {
-		for _, id := range ids {
-			m := s.Messages[id]
-			if m == nil {
-				return errors.New("message not found")
-			}
-			copy := cloneRecord(m)
-			operation := imap.FlagsOp(imap.RemoveFlags)
-			if read {
-				operation = imap.AddFlags
-			}
-			copy.Flags = backendutil.UpdateFlags(copy.Flags, operation, []string{imap.SeenFlag})
-			s.Messages[id] = copy
-		}
-		return nil
-	})
-}
-func (a *httpAPI) readMessages(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		IDs    []string
-		Read   *bool
-		Search string
-	}
-	if err := decodeJSON(w, r, 1<<20, &body); err != nil || body.Read == nil {
-		apiError(w, 400, errors.New("Read is required"))
-		return
-	}
-	if len(body.IDs) > 0 && body.Search != "" {
-		apiError(w, 400, errors.New("use IDs or Search"))
-		return
-	}
-	if len(body.IDs) == 0 {
-		predicate, err := compileSearch(body.Search, r.URL.Query().Get("tz"))
-		if err != nil {
-			apiError(w, 400, err)
-			return
-		}
-		for _, m := range a.store.snapshot() {
-			if predicate(m) {
-				body.IDs = append(body.IDs, m.ID)
-			}
-		}
-	}
-	if err := a.setRead(body.IDs, *body.Read); err != nil {
-		apiError(w, 400, err)
-		return
-	}
-	w.Write([]byte("ok\n"))
-}
-
-func (a *httpAPI) tags(w http.ResponseWriter, r *http.Request) {
-	unique := map[string]bool{}
-	for _, m := range a.store.snapshot() {
-		for _, tag := range m.Tags {
-			unique[tag] = true
-		}
-	}
-	tags := []string{}
-	for tag := range unique {
-		tags = append(tags, tag)
-	}
-	sort.Strings(tags)
-	jsonResponse(w, 200, tags)
-}
-func (a *httpAPI) setTags(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		IDs  []string
-		Tags []string
-	}
-	if err := decodeJSON(w, r, 1<<20, &body); err != nil || len(body.IDs) == 0 {
-		apiError(w, 400, errors.New("IDs and Tags are required"))
-		return
-	}
-	tags, err := normalizeTags(body.Tags)
-	if err != nil {
-		apiError(w, 400, err)
-		return
-	}
-	err = a.store.mutate(func(s *storeState) error {
-		for _, id := range body.IDs {
-			m := s.Messages[id]
-			if m == nil {
-				return errors.New("message not found")
-			}
-			copy := cloneRecord(m)
-			copy.Tags = tags
-			s.Messages[id] = copy
-		}
-		return nil
-	})
-	if err != nil {
-		apiError(w, 400, err)
-		return
-	}
-	w.Write([]byte("ok\n"))
-}
-func (a *httpAPI) changeTag(from, to string) error {
-	return a.store.mutate(func(s *storeState) error {
+	// Search and deletion share a single mutation, so concurrent pruning cannot
+	// invalidate a snapshot and turn an otherwise successful delete into a 500.
+	err = a.account.mutate(func(s *storeState) error {
 		for id, m := range s.Messages {
-			var tags []string
-			changed := false
-			for _, tag := range m.Tags {
-				if tag == from {
-					changed = true
-					if to != "" {
-						tags = append(tags, to)
-					}
-				} else {
-					tags = append(tags, tag)
-				}
-			}
-			if changed {
-				copy := cloneRecord(m)
-				copy.Tags, _ = normalizeTags(tags)
-				s.Messages[id] = copy
+			if (len(ids) > 0 && ids[id]) || (len(ids) == 0 && predicate(m)) {
+				delete(s.Messages, id)
 			}
 		}
 		return nil
 	})
-}
-func (a *httpAPI) renameTag(w http.ResponseWriter, r *http.Request) {
-	var body struct{ Name string }
-	if err := decodeJSON(w, r, 1024, &body); err != nil || !tagName.MatchString(body.Name) {
-		apiError(w, 400, errors.New("valid Name is required"))
-		return
-	}
-	if err := a.changeTag(r.PathValue("tag"), body.Name); err != nil {
+	if err != nil {
 		apiError(w, 500, err)
-		return
-	}
-	w.Write([]byte("ok\n"))
-}
-func (a *httpAPI) removeTag(w http.ResponseWriter, r *http.Request) {
-	if err := a.changeTag(r.PathValue("tag"), ""); err != nil {
-		apiError(w, 500, err)
-		return
-	}
-	w.Write([]byte("ok\n"))
-}
-
-func (a *httpAPI) listToxics(w http.ResponseWriter, r *http.Request) {
-	jsonResponse(w, 200, a.store.toxics.list())
-}
-func (a *httpAPI) getToxic(w http.ResponseWriter, r *http.Request) {
-	for _, t := range a.store.toxics.list() {
-		if t.Name == r.PathValue("name") {
-			jsonResponse(w, 200, t)
-			return
-		}
-	}
-	apiError(w, 404, errors.New("toxic not found"))
-}
-func (a *httpAPI) createToxic(w http.ResponseWriter, r *http.Request) {
-	t := toxic{Enabled: true}
-	if err := decodeJSON(w, r, 64<<10, &t); err != nil {
-		apiError(w, 400, err)
-		return
-	}
-	t.Hits = 0
-	if err := a.store.toxics.put(t, true); err != nil {
-		apiError(w, 400, err)
-		return
-	}
-	jsonResponse(w, 201, t)
-}
-func (a *httpAPI) updateToxic(w http.ResponseWriter, r *http.Request) {
-	t := toxic{Enabled: true}
-	if err := decodeJSON(w, r, 64<<10, &t); err != nil {
-		apiError(w, 400, err)
-		return
-	}
-	if t.Name != "" && t.Name != r.PathValue("name") {
-		apiError(w, 400, errors.New("toxic name must match URL"))
-		return
-	}
-	t.Name = r.PathValue("name")
-	if err := a.store.toxics.put(t, false); err != nil {
-		apiError(w, 400, err)
-		return
-	}
-	a.getToxic(w, r)
-}
-func (a *httpAPI) toggleToxic(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Enabled *bool `json:"enabled"`
-	}
-	if err := decodeJSON(w, r, 1024, &body); err != nil || body.Enabled == nil {
-		apiError(w, 400, errors.New("enabled is required"))
-		return
-	}
-	registry := a.store.toxics
-	registry.mu.Lock()
-	t, ok := registry.entries[r.PathValue("name")]
-	if ok {
-		t.Enabled = *body.Enabled
-		registry.entries[t.Name] = t
-	}
-	registry.mu.Unlock()
-	if !ok {
-		apiError(w, 404, errors.New("toxic not found"))
-		return
-	}
-	jsonResponse(w, 200, t)
-}
-func (a *httpAPI) deleteToxic(w http.ResponseWriter, r *http.Request) {
-	if !a.store.toxics.remove(r.PathValue("name")) {
-		apiError(w, 404, errors.New("toxic not found"))
 		return
 	}
 	w.WriteHeader(204)
 }
-
-func (a *httpAPI) folders(w http.ResponseWriter, r *http.Request) {
-	folders, err := a.store.user.ListMailboxes(false)
+func (a *accountAPI) deleteMessage(w http.ResponseWriter, r *http.Request) {
+	if err := a.account.mutate(func(s *storeState) error { delete(s.Messages, r.PathValue("id")); return nil }); err != nil {
+		apiError(w, 500, err)
+		return
+	}
+	w.WriteHeader(204)
+}
+func (a *accountAPI) setFlags(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Flags *[]string `json:"flags"`
+	}
+	if err := decodeJSON(w, r, 64<<10, &body); err != nil || body.Flags == nil {
+		apiError(w, 400, errors.New("flags is required"))
+		return
+	}
+	for _, f := range *body.Flags {
+		if f == "" || strings.ContainsAny(f, " (){\r\n\x00") {
+			apiError(w, 400, errors.New("invalid flag"))
+			return
+		}
+	}
+	err := a.account.mutate(func(s *storeState) error {
+		m := s.Messages[r.PathValue("id")]
+		if m == nil {
+			return errors.New("message not found")
+		}
+		copy := cloneRecord(m)
+		copy.Flags = append([]string{}, (*body.Flags)...)
+		s.Messages[m.ID] = copy
+		return nil
+	})
+	if err != nil {
+		apiError(w, 404, err)
+		return
+	}
+	a.message(w, r)
+}
+func (a *accountAPI) folders(w http.ResponseWriter, r *http.Request) {
+	folders, err := a.account.user.ListMailboxes(false)
 	if err != nil {
 		apiError(w, 500, err)
 		return
 	}
 	result := []any{}
 	for _, f := range folders {
-		status, err := f.Status([]imap.StatusItem{imap.StatusMessages, imap.StatusUidNext, imap.StatusUidValidity})
+		status, err := f.Status()
 		if err != nil {
 			apiError(w, 500, err)
 			return
 		}
-		result = append(result, map[string]any{"name": f.Name(), "messages": status.Messages, "uid_next": status.UidNext, "uid_validity": status.UidValidity})
+		result = append(result, map[string]any{"name": f.Name(), "messages": status.NumMessages, "uid_next": status.UIDNext, "uid_validity": status.UIDValidity})
 	}
 	jsonResponse(w, 200, result)
 }
-func (a *httpAPI) createFolder(w http.ResponseWriter, r *http.Request) {
+func (a *accountAPI) createFolder(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Name string `json:"name"`
 	}
@@ -618,48 +403,76 @@ func (a *httpAPI) createFolder(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, err)
 		return
 	}
-	if err := a.store.user.CreateMailbox(body.Name); err != nil {
+	if err := a.account.user.CreateMailbox(body.Name); err != nil {
 		apiError(w, 400, err)
 		return
 	}
 	jsonResponse(w, 201, body)
 }
-func (a *httpAPI) view(w http.ResponseWriter, r *http.Request) {
-	file := r.PathValue("file")
-	suffix := ".html"
-	if strings.HasSuffix(file, ".txt") {
-		suffix = ".txt"
-	}
-	id := strings.TrimSuffix(file, suffix)
-	m := a.store.get(id)
-	if m == nil {
-		apiError(w, 404, errors.New("message not found"))
-		return
-	}
-	if suffix == ".txt" {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.Write([]byte(m.Detail.Text))
-	} else {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:")
-		w.Write([]byte(m.Detail.HTML))
-	}
-}
 
-func (a *httpAPI) importRaw(w http.ResponseWriter, r *http.Request) {
-	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, a.store.config.MaxSize))
-	if err != nil {
-		apiError(w, 400, err)
-		return
+func (a *httpAPI) faults(w http.ResponseWriter, r *http.Request) {
+	registry, scope := a.service.serverFaults, "server"
+	if id := r.PathValue("account"); id != "" {
+		account := a.service.lookup(id)
+		if account == nil {
+			apiError(w, 404, errors.New("account not found"))
+			return
+		}
+		registry, scope = account.faults, "account"
 	}
-	folder := r.URL.Query().Get("folder")
-	if folder == "" {
-		folder = "INBOX"
+	name := r.PathValue("name")
+	switch r.Method {
+	case "GET":
+		if name == "" {
+			jsonResponse(w, 200, registry.list())
+			return
+		}
+		if t, ok := registry.get(name); ok {
+			jsonResponse(w, 200, t)
+		} else {
+			apiError(w, 404, errors.New("fault not found"))
+		}
+	case "POST", "PUT":
+		rule := faultRule{Enabled: true}
+		if err := decodeJSON(w, r, 64<<10, &rule); err != nil {
+			apiError(w, 400, err)
+			return
+		}
+		if name != "" {
+			if rule.Name != "" && rule.Name != name {
+				apiError(w, 400, errors.New("fault name must match URL"))
+				return
+			}
+			rule.Name = name
+		}
+		if err := registry.put(rule, r.Method == "POST", scope); err != nil {
+			apiError(w, 400, err)
+			return
+		}
+		result, _ := registry.get(rule.Name)
+		status := 200
+		if r.Method == "POST" {
+			status = 201
+		}
+		jsonResponse(w, status, result)
+	case "PATCH":
+		var body struct {
+			Enabled *bool `json:"enabled"`
+		}
+		if err := decodeJSON(w, r, 1024, &body); err != nil || body.Enabled == nil {
+			apiError(w, 400, errors.New("enabled is required"))
+			return
+		}
+		if t, ok := registry.toggle(name, *body.Enabled); ok {
+			jsonResponse(w, 200, t)
+		} else {
+			apiError(w, 404, errors.New("fault not found"))
+		}
+	case "DELETE":
+		if !registry.remove(name) {
+			apiError(w, 404, errors.New("fault not found"))
+			return
+		}
+		w.WriteHeader(204)
 	}
-	m, err := a.store.append(raw, appendOptions{Folder: folder, Notify: true})
-	if err != nil {
-		apiError(w, 400, err)
-		return
-	}
-	jsonResponse(w, 201, map[string]any{"ID": m.ID, "MessageID": m.Detail.MessageID, "Folder": m.Folder})
 }
