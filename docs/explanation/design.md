@@ -78,7 +78,7 @@ written and closed synchronously; completion faults run after those writers
 finish. V2 handles IDLE's continuation and DONE parsing, while Mailarky supplies
 account updates through its session API.
 
-The [v2 fork](https://github.com/johlo/go-imap/tree/mailarky-v2) adds optional
+The [v2 fork](https://github.com/johlo/go-imap/tree/imap-v2-protocol-hooks) adds optional
 command, response, greeting, and capability hooks. Its module path is
 `github.com/johlo/go-imap/v2`. Upstream v2 remains in development, so exact
 revision pins and independent socket tests still matter. Mailarky advertises

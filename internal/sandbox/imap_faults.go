@@ -1,8 +1,10 @@
 package sandbox
 
 import (
+	"crypto/tls"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/johlo/go-imap/v2"
 	"github.com/johlo/go-imap/v2/imapserver"
@@ -34,6 +36,23 @@ func newIMAPServer(service *Service) *imapserver.Server {
 		},
 	}
 	options.GreetingHook = func(c *imapserver.Conn) error {
+		// tls.Listener accepts connections before negotiating TLS. Greeting
+		// faults belong after the handshake, so a silent close stays an IMAP
+		// failure and a banner delay does not consume the TLS handshake timeout.
+		if conn, ok := c.NetConn().(*tls.Conn); ok {
+			if err := conn.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
+				_ = c.Close()
+				return imapserver.ErrResponseHandled
+			}
+			if err := conn.Handshake(); err != nil {
+				_ = c.Close()
+				return imapserver.ErrResponseHandled
+			}
+			if err := conn.SetDeadline(time.Time{}); err != nil {
+				_ = c.Close()
+				return imapserver.ErrResponseHandled
+			}
+		}
 		cmd := &imapserver.Command{Name: "CONNECT"}
 		return c.Session().(*imapSession).apply(cmd, imapEvent(c, cmd, "before"), nil)
 	}

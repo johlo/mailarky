@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 
 	"github.com/johlo/go-smtp"
 )
@@ -12,38 +11,38 @@ import (
 type smtpInjectedError struct{ rule faultRule }
 
 func (e *smtpInjectedError) Error() string { return "Injected fault: " + e.rule.Name }
-func applySMTPFault(c *smtp.Conn, service *Service, t faultRule) bool {
+func applySMTPFault(c *smtp.Conn, service *Service, t faultRule) error {
 	switch a := t.Action.Parameters.(type) {
 	case *delayAction:
 		if err := waitFault(service.ctx, service.ctx.Done(), a.DelayMS); err != nil {
-			_ = c.Close()
-			return true
+			return c.Disconnect(nil)
 		}
-		return false
+		return nil
 	case *rejectAction:
 		enhanced := smtp.EnhancedCodeNotSet
 		if a.EnhancedCode != "" {
 			_, _ = fmt.Sscanf(a.EnhancedCode, "%d.%d.%d", &enhanced[0], &enhanced[1], &enhanced[2])
 		}
-		c.WriteReply(&smtp.Reply{Code: a.Code, EnhancedCode: enhanced, Lines: []string{faultMessage(t.Name, a.Message)}})
-		if a.Code == 421 || c.Command() == "CONNECT" {
-			_ = c.Close()
+		reply := &smtp.Reply{Code: a.Code, EnhancedCode: enhanced, Lines: []string{faultMessage(t.Name, a.Message)}}
+		if a.Code == 421 || c.Command() == "" {
+			return c.Disconnect(reply)
 		}
-		return true
+		c.WriteReply(reply)
+		return smtp.ErrResponseHandled
 	case *disconnectAction:
+		var reply *smtp.Reply
 		if !a.Silent {
-			c.WriteReply(&smtp.Reply{Code: 421, EnhancedCode: smtp.EnhancedCode{4, 3, 2}, Lines: []string{faultMessage(t.Name, a.Message)}})
+			reply = &smtp.Reply{Code: 421, EnhancedCode: smtp.EnhancedCode{4, 3, 2}, Lines: []string{faultMessage(t.Name, a.Message)}}
 		}
-		_ = c.Close()
-		return true
+		return c.Disconnect(reply)
 	case *responseAction:
-		_, _ = io.WriteString(c.Conn(), wireResponse(a.Response, ""))
-		if a.Close || c.Command() == "CONNECT" {
-			_ = c.Close()
+		err := c.WriteRaw(wireResponse(a.Response, ""))
+		if err != nil || a.Close || c.Command() == "" {
+			return c.Disconnect(nil)
 		}
-		return true
+		return smtp.ErrResponseHandled
 	}
-	return false
+	return nil
 }
 func (s *smtpSession) faults(command, phase string, account *Account, message *storedMessage, server bool) error {
 	e := protocolEvent{protocol: "smtp", command: command, phase: phase, username: s.username, message: message}
@@ -112,11 +111,11 @@ func smtpContext(c *smtp.Conn) smtpCommandContext {
 	}
 	return ctx
 }
-func (b *smtpBackend) hookFaults(c *smtp.Conn, command, phase string, ctx smtpCommandContext) bool {
+func (b *smtpBackend) hookFaults(c *smtp.Conn, command, phase string, ctx smtpCommandContext) error {
 	e := protocolEvent{protocol: "smtp", command: command, phase: phase, username: ctx.username, message: ctx.message}
 	for _, t := range b.service.serverFaults.claim(e, false) {
-		if applySMTPFault(c, b.service, t) {
-			return true
+		if err := applySMTPFault(c, b.service, t); err != nil {
+			return err
 		}
 	}
 	for _, delivery := range ctx.accounts {
@@ -126,33 +125,37 @@ func (b *smtpBackend) hookFaults(c *smtp.Conn, command, phase string, ctx smtpCo
 			e.message = &copy
 		}
 		for _, t := range delivery.account.faults.claim(e, false) {
-			if applySMTPFault(c, b.service, t) {
-				return true
+			if err := applySMTPFault(c, b.service, t); err != nil {
+				return err
 			}
 		}
 	}
-	return false
+	return nil
 }
 func (b *smtpBackend) installFaultHooks(srv *smtp.Server) {
-	srv.ErrorHook = func(c *smtp.Conn, err error) bool {
-		var injected *smtpInjectedError
-		if !errors.As(err, &injected) {
-			return false
-		}
-		return applySMTPFault(c, b.service, injected.rule)
+	srv.GreetingHook = func(c *smtp.Conn) error {
+		return b.hookFaults(c, "CONNECT", "before", smtpCommandContext{})
 	}
-	srv.CommandHook = func(c *smtp.Conn, command, arg string) bool {
+	srv.CommandHook = func(c *smtp.Conn, command, arg string) error {
 		ctx := smtpContext(c)
 		c.HookData = ctx
-		if command == "MAIL" || command == "RCPT" {
-			return false
-		} // parsed envelope/account in backend
+		if command == "CONNECT" || command == "MAIL" || command == "RCPT" {
+			// CONNECT is a fault event, not an SMTP command. The backend handles
+			// MAIL/RCPT faults after parsing the envelope and resolving accounts.
+			return nil
+		}
 		if command == "AUTH" {
 			ctx = smtpCommandContext{}
 		}
 		return b.hookFaults(c, command, "before", ctx)
 	}
 	srv.ResponseHook = func(c *smtp.Conn, reply *smtp.Reply) *smtp.Reply {
+		var injected *smtpInjectedError
+		if errors.As(reply.Err, &injected) {
+			if err := applySMTPFault(c, b.service, injected.rule); err != nil {
+				return nil
+			}
+		}
 		if reply.Code < 200 || reply.Code >= 400 || reply.Code == 334 || reply.Code == 354 {
 			return reply
 		}
@@ -175,7 +178,7 @@ func (b *smtpBackend) installFaultHooks(srv *smtp.Server) {
 				reply.Lines = append(reply.Lines[:1:1], filterCapabilities(reply.Lines[1:], a.Omit)...)
 			}
 		}
-		if command != "CONNECT" && b.hookFaults(c, command, "after", ctx) {
+		if command != "" && command != "CONNECT" && b.hookFaults(c, command, "after", ctx) != nil {
 			return nil
 		}
 		return reply

@@ -21,7 +21,9 @@ Every rule requires `trigger.protocol` (`smtp` or `imap`), an uppercase
 | `after` | Successful command completion, before the final reply; SMTP DATA after storing; BDAT after each successful chunk (message filters are available after LAST) |
 
 Use `UID FETCH` and `UID SEARCH` as distinct IMAP commands. `CONNECT` is the
-greeting hook and requires a server rule in `before` phase. Greeting and TLS
+greeting event and requires a server rule in `before` phase. With implicit
+TLS, the handshake finishes before greeting delays or disconnects take effect.
+A client-sent `CONNECT` line does not trigger greeting rules. Greeting and TLS
 faults cannot target an account, since authentication has not identified one.
 Authentication, TLS negotiation, and logout faults require `before` phase.
 

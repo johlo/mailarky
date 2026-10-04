@@ -19,7 +19,7 @@ node svc.manager "Service / [tag]\[Component][/tag] / Config, server faults and 
 
 node svc.account "Account [tag]\[one per test][/tag]"  below svc.manager (gap: wide)  style: account  deck: "" ""
 node svc.account.store "Message store / [tag]\[Component][/tag] / Raw MIME, folders, UIDs, flags. One append path for every protocol" (wrap: 28)  style: component
-node svc.account.toxics "Account fault registry / [tag]\[Component][/tag] / Trigger, filter and typed action. Atomic claims, unlocked execution" (wrap: 28)  right of svc.account.store  level with svc.account.store  style: component
+node svc.account.faults "Account fault registry / [tag]\[Component][/tag] / Trigger, filter and typed action. Atomic claims, unlocked execution" (wrap: 28)  right of svc.account.store  level with svc.account.store  style: component
 
 node svc.notify "Notifications / [tag]\[Component][/tag] / WebSocket stream and webhooks" (wrap: 24)  right of svc.account  level with svc.account  style: component
 

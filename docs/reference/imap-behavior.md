@@ -42,7 +42,7 @@ Message faults alter the selected response, not stored MIME. A `hide` fault can
 make SEARCH/FETCH omit a message while folder counts still reflect actual
 storage; this inconsistency is intentional fault behavior.
 
-The implementation uses the [go-imap v2 fork](https://github.com/johlo/go-imap/tree/mailarky-v2).
+The implementation uses the [go-imap v2 fork](https://github.com/johlo/go-imap/tree/imap-v2-protocol-hooks).
 The listener advertises IMAP4rev1. There is no CONDSTORE, QRESYNC, or UIDPLUS.
 MOVE is not implemented. IDLE requires a selected folder. For TCP behavior,
 combine the service with Toxiproxy.

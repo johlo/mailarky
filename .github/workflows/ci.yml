@@ -12,7 +12,7 @@ jobs:
           go-version-file: go.mod
       - run: make test
       - run: docker compose up -d --build --wait --wait-timeout 60
-      - name: SMTP, HTTP, TLS IMAP and toxic isolation smoke test
+      - name: SMTP, HTTP, TLS IMAP and fault isolation smoke test
         run: python3 scripts/smoke.py
       - name: Container logs
         if: always()

@@ -134,7 +134,7 @@ Mailarky imports the public [SMTP](https://github.com/johlo/go-smtp) and
 paths. `go.mod` pins exact revisions and contains no `replace` directives.
 Each fork retains its upstream license and tests and runs its own CI.
 
-The IMAP implementation uses [go-imap v2](https://github.com/johlo/go-imap/tree/mailarky-v2)
+The IMAP implementation uses [go-imap v2](https://github.com/johlo/go-imap/tree/imap-v2-protocol-hooks)
 with a pinned revision. V2 is still in development upstream; Mailarky keeps
 independent protocol tests around its session backend and fault hooks. The
 listener advertises IMAP4rev1; the library version does not enable IMAP4rev2
