@@ -4,3 +4,4 @@
 /mail-data/
 /*.db
 /*.db.mailboxes/
+/dist/

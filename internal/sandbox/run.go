@@ -5,9 +5,13 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"flag"
+	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"time"
 	_ "time/tzdata"
 )
@@ -15,7 +19,7 @@ import (
 func run(ctx context.Context, c configuration) error {
 	cert, err := tls.LoadX509KeyPair(c.Cert, c.Key)
 	if err != nil {
-		return err
+		return fmt.Errorf("load IMAP TLS certificate: %w; set --imap-tls-cert and --imap-tls-key (or MAILARKY_IMAP_CERT and MAILARKY_IMAP_KEY); see mailarky --help for setup", err)
 	}
 	manager, err := openService(ctx, c)
 	if err != nil {
@@ -74,16 +78,35 @@ func run(ctx context.Context, c configuration) error {
 }
 
 // Run handles command arguments and serves until ctx is canceled or a listener
-// fails. The sendmail and version commands return without starting the service.
+// fails. The sendmail, help and version commands do not start the service.
 func Run(ctx context.Context, args []string) error {
-	if len(args) > 0 && args[0] == "sendmail" {
-		return sendmail(args[1:])
+	return runCommand(ctx, args, os.Stdout)
+}
+
+func runCommand(ctx context.Context, args []string, output io.Writer) error {
+	if len(args) > 0 {
+		switch args[0] {
+		case "sendmail":
+			err := sendmail(args[1:], output)
+			if errors.Is(err, flag.ErrHelp) {
+				return nil
+			}
+			return err
+		case "--help", "-h", "help":
+			printUsage(output)
+			return nil
+		case "--version", "version":
+			if len(args) != 1 {
+				return errors.New("version does not accept arguments")
+			}
+			_, err := fmt.Fprintln(output, buildVersion())
+			return err
+		}
 	}
-	if len(args) > 0 && (args[0] == "--version" || args[0] == "version") {
-		log.Print("mailarky 2 (SMTP, IMAP, HTTP)")
+	c, err := loadConfig(args, output)
+	if errors.Is(err, flag.ErrHelp) {
 		return nil
 	}
-	c, err := loadConfig(args)
 	if err != nil {
 		return err
 	}

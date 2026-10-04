@@ -1,0 +1,40 @@
+version: 2
+project_name: mailarky
+
+builds:
+  - main: ./cmd/mailarky
+    binary: mailarky
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+      - -buildvcs=false
+    ldflags:
+      - >-
+        -s -w
+        -X github.com/johlo/mailarky/internal/sandbox.version=v{{ .Version }}
+        -X github.com/johlo/mailarky/internal/sandbox.revision={{ .FullCommit }}
+
+archives:
+  - formats: [tar.gz]
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+      - CONTRIBUTING.md
+      - SECURITY.md
+      - openapi.yaml
+      - docs/**/*
+      - testdata/tls/*
+
+checksum:
+  name_template: checksums.txt
+
+# GitHub CLI generates release notes after the image has been published.
+changelog:
+  disable: true

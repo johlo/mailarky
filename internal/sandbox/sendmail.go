@@ -16,8 +16,9 @@ import (
 )
 
 // Sendmail mode accepts envelope recipients or -t to extract To/Cc/Bcc.
-func sendmail(args []string) error {
+func sendmail(args []string, output io.Writer) error {
 	fs := flag.NewFlagSet("sendmail", flag.ContinueOnError)
+	fs.SetOutput(output)
 	host := os.Getenv("MAILARKY_SENDMAIL_SMTP_ADDR")
 	if host == "" {
 		host = "localhost:1025"
