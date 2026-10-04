@@ -55,6 +55,7 @@ func (a *httpAPI) handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/accounts", a.createAccount)
 	mux.HandleFunc("GET /api/v1/accounts/{account}", a.withAccount((*accountAPI).description))
 	mux.HandleFunc("DELETE /api/v1/accounts/{account}", a.deleteAccount)
+	mux.HandleFunc("PUT /api/v1/accounts/{account}/oauth-tokens", a.withAccount((*accountAPI).oauthTokens))
 	mux.HandleFunc("GET /api/v1/accounts/{account}/messages", a.withAccount((*accountAPI).messages))
 	mux.HandleFunc("POST /api/v1/accounts/{account}/messages", a.withAccount((*accountAPI).createMessage))
 	mux.HandleFunc("DELETE /api/v1/accounts/{account}/messages", a.withAccount((*accountAPI).deleteMessages))
@@ -121,7 +122,7 @@ func (a *httpAPI) listAccounts(w http.ResponseWriter, r *http.Request) {
 }
 func (a *httpAPI) createAccount(w http.ResponseWriter, r *http.Request) {
 	var req mailboxCreation
-	if err := decodeJSON(w, r, 64<<10, &req); err != nil {
+	if err := decodeJSON(w, r, 256<<10, &req); err != nil {
 		apiError(w, 400, err)
 		return
 	}
@@ -189,7 +190,11 @@ func (a *accountAPI) createMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	m, err := a.account.append(raw, options)
 	if err != nil {
-		apiError(w, 400, err)
+		status := 400
+		if errors.Is(err, errQuota) {
+			status = 507
+		}
+		apiError(w, status, err)
 		return
 	}
 	jsonResponse(w, 201, m.detail())

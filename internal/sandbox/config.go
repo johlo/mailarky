@@ -28,6 +28,8 @@ type configuration struct {
 	RequireTLS            bool          `yaml:"smtp_require_starttls"`
 	SMTPRequireAuth       bool          `yaml:"smtp_require_auth"`
 	SMTPAllowInsecureAuth bool          `yaml:"smtp_allow_insecure_auth"`
+	SMTPMaxRecipients     int           `yaml:"smtp_max_recipients"`
+	AccountLimits         accountLimits `yaml:"account_limits"`
 	HTTPAuth              string        `yaml:"http_auth"`
 	HTTPAuthFile          string        `yaml:"http_auth_file"`
 	HTTPCert              string        `yaml:"http_cert"`
@@ -50,7 +52,7 @@ type configuration struct {
 }
 
 func defaultConfig() configuration {
-	return configuration{SMTPAddress: ":1025", IMAPAddress: ":1993", HTTPAddress: ":8026", Cert: "/certs/server.crt", Key: "/certs/server.key", Username: mailboxUsername, Password: mailboxPassword, SMTPFolder: "Sent", MaxSize: maxMessageBytes, WebhookLimit: time.Second}
+	return configuration{SMTPAddress: ":1025", IMAPAddress: ":1993", HTTPAddress: ":8026", Cert: "/certs/server.crt", Key: "/certs/server.key", Username: mailboxUsername, Password: mailboxPassword, SMTPFolder: "Sent", MaxSize: maxMessageBytes, WebhookLimit: time.Second, SMTPMaxRecipients: 1000}
 }
 
 // Register flags before loading settings so help always shows built-in defaults.
@@ -99,6 +101,14 @@ func configFlags(c *configuration, sizeMB *int, output io.Writer) (*flag.FlagSet
 	boolean(&c.RequireTLS, "smtp-require-starttls", "MAILARKY_SMTP_REQUIRE_STARTTLS", "Require STARTTLS before SMTP delivery")
 	boolean(&c.SMTPRequireAuth, "smtp-require-auth", "MAILARKY_SMTP_REQUIRE_AUTH", "Require SMTP authentication")
 	boolean(&c.SMTPAllowInsecureAuth, "smtp-auth-allow-insecure", "MAILARKY_SMTP_AUTH_ALLOW_INSECURE", "Allow SMTP authentication without TLS")
+	integer(&c.SMTPMaxRecipients, "smtp-max-recipients", "MAILARKY_SMTP_MAX_RECIPIENTS", "Recipients per SMTP transaction (0 for unlimited)")
+	integer(&c.AccountLimits.SMTPConnections, "account-smtp-connections", "MAILARKY_ACCOUNT_SMTP_CONNECTIONS", "Authenticated SMTP connections per account (0 for unlimited)")
+	integer(&c.AccountLimits.IMAPConnections, "account-imap-connections", "MAILARKY_ACCOUNT_IMAP_CONNECTIONS", "Authenticated IMAP connections per account (0 for unlimited)")
+	integer(&c.AccountLimits.SendMessages, "account-send-messages", "MAILARKY_ACCOUNT_SEND_MESSAGES", "SMTP deliveries per account per sending window (0 for unlimited)")
+	str(&c.AccountLimits.SendWindow, "account-send-window", "MAILARKY_ACCOUNT_SEND_WINDOW", "Sending window duration, e.g. 1m")
+	integer(&c.AccountLimits.QuotaMessages, "account-quota-messages", "MAILARKY_ACCOUNT_QUOTA_MESSAGES", "Stored messages per account (0 for unlimited)")
+	fs.Int64Var(&c.AccountLimits.QuotaBytes, "account-quota-bytes", c.AccountLimits.QuotaBytes, "Stored raw MIME bytes per account (MAILARKY_ACCOUNT_QUOTA_BYTES; 0 for unlimited)")
+	envs["MAILARKY_ACCOUNT_QUOTA_BYTES"] = "account-quota-bytes"
 	str(&c.HTTPAuth, "http-auth", "MAILARKY_HTTP_AUTH", "HTTP credentials as whitespace-separated username:password pairs")
 	str(&c.HTTPAuthFile, "http-auth-file", "MAILARKY_HTTP_AUTH_FILE", "File containing HTTP credentials")
 	str(&c.HTTPCert, "http-tls-cert", "MAILARKY_HTTP_TLS_CERT", "HTTPS certificate file")
@@ -177,6 +187,12 @@ func loadConfig(args []string, output io.Writer) (configuration, error) {
 	}
 	if c.MaxSize <= 0 || c.MaxMessages < 0 || c.MaxAge < 0 {
 		return c, errors.New("message size must be positive and retention limits nonnegative")
+	}
+	if c.SMTPMaxRecipients < 0 {
+		return c, errors.New("smtp-max-recipients must be nonnegative")
+	}
+	if err := c.AccountLimits.validate(); err != nil {
+		return c, err
 	}
 	if c.Username == "" || c.Password == "" || len(c.Password) > 72 {
 		return c, errors.New("account username and password are required; password must be at most 72 bytes")

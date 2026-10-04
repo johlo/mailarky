@@ -21,18 +21,36 @@ type imapSession struct {
 
 var _ imapserver.Session = (*imapSession)(nil)
 
-func (s *imapSession) Close() error { s.selected = nil; return nil }
+func (s *imapSession) Close() error {
+	s.selected = nil
+	if s.account != nil {
+		s.account.releaseConnection("imap")
+		s.account = nil
+	}
+	return nil
+}
 func (s *imapSession) Login(username, password string) error {
+	if err := s.authenticationFault(username); err != nil {
+		return err
+	}
+	account := s.service.authenticate(username, password)
+	if account == nil {
+		return imapserver.ErrAuthFailed
+	}
+	return s.bindAccount(account)
+}
+func (s *imapSession) authenticationFault(username string) error {
 	cmd := s.conn.Command()
 	e := imapEvent(s.conn, cmd, "before")
 	e.username, e.identityOnly = username, true
 	account := s.service.accountByUsername(username)
-	if err := s.apply(cmd, e, account); err != nil {
-		return err
-	}
-	account = s.service.authenticate(username, password)
-	if account == nil {
+	return s.apply(cmd, e, account)
+}
+func (s *imapSession) bindAccount(account *Account) error {
+	if err := account.acquireConnection("imap"); errors.Is(err, errAccountClosed) {
 		return imapserver.ErrAuthFailed
+	} else if err != nil {
+		return &imap.Error{Type: imap.StatusResponseTypeNo, Code: imap.ResponseCodeLimit, Text: "Account IMAP connection limit reached"}
 	}
 	s.account = account
 	return nil
@@ -159,6 +177,9 @@ func (s *imapSession) Store(_ *imapserver.FetchWriter, set imap.NumSet, flags *i
 func imapNo(err error) error {
 	if err == nil || errors.Is(err, imapserver.ErrResponseHandled) {
 		return err
+	}
+	if errors.Is(err, errQuota) {
+		err = &imap.Error{Type: imap.StatusResponseTypeNo, Code: imap.ResponseCodeOverQuota, Text: err.Error()}
 	}
 	return (*imap.Error)(imapFaultStatus(err))
 }

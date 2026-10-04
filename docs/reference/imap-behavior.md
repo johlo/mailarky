@@ -3,6 +3,7 @@
 The listener uses implicit TLS and account credentials shared with SMTP AUTH.
 Every account has its own folders and UID space. Initial folders are `INBOX`,
 `Sent`, `Archive`, and the configured SMTP folder.
+Authentication supports LOGIN, SASL PLAIN, and test-token XOAUTH2.
 
 | Operation | Behavior |
 | --- | --- |
@@ -14,8 +15,8 @@ Every account has its own folders and UID space. Initial folders are `INBOX`,
 | BODY[] / BODY[section] / RFC822 / RFC822.TEXT | Set `\Seen` in a writable selection |
 | BODY.PEEK / RFC822.HEADER / metadata | Preserve `\Seen` |
 | STORE / UID STORE | Change flags; SILENT suppresses replies for that command's changes, while other sessions' changes are still reported |
-| APPEND | Store raw MIME in an existing folder |
-| COPY / UID COPY | Copy with a new destination UID |
+| APPEND | Store raw MIME in an existing folder; reject full account quota with `NO [OVERQUOTA]` |
+| COPY / UID COPY | Copy with a new destination UID; quota failure leaves all copies uncommitted |
 | EXPUNGE | Remove messages carrying `\Deleted` |
 | CLOSE | Deselect; expunge only for a writable selection |
 | CREATE / DELETE / RENAME | Folder operations; INBOX cannot be deleted |
@@ -31,6 +32,12 @@ Selected clients receive EXISTS, EXPUNGE, and flag updates for changes from
 HTTP, retention, or other IMAP sessions. Sequence-number views remain stable
 until the corresponding EXPUNGE is sent. EXPUNGE is deferred during non-UID
 FETCH, STORE, and SEARCH. Use UID commands for synchronization.
+
+Explicit IDLE notification-drop faults intentionally break that guarantee:
+the server view advances but selected wire updates are lost. Dropped updates
+are not replayed. Reselect or reconnect to resynchronize. Active IDLE
+disconnects run after the configured interval and are cancelled by DONE;
+see the [fault guide](../how-to/fault-injection.md#interrupt-active-idle-or-lose-a-notification).
 
 A writable body FETCH commits its implicit `\Seen` changes in one store
 mutation before sending the prepared results. Hidden messages and messages at

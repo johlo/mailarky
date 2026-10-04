@@ -287,16 +287,27 @@ func (m *mailbox) CopyMessages(set imap.NumSet, dest string) error {
 		if !ok {
 			return errNoSuchMailbox
 		}
+		var copies []*storedMessage
+		var bytes int64
 		for i, record := range records {
 			if !selected(set, uint32(i+1), record, records) {
 				continue
 			}
-			if folder.NextUID == ^uint32(0) {
-				return errors.New("UID space exhausted")
-			}
 			current := s.Messages[record.ID]
 			if current == nil {
 				continue
+			}
+			copies = append(copies, current)
+			bytes += int64(len(current.Raw))
+		}
+		if len(copies) > 0 {
+			if err := m.store.checkQuota(*s, len(copies), bytes); err != nil {
+				return err
+			}
+		}
+		for _, current := range copies {
+			if folder.NextUID == ^uint32(0) {
+				return errors.New("UID space exhausted")
 			}
 			copy := cloneRecord(current)
 			copy.ID = uuid.NewString()

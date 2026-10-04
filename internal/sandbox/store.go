@@ -42,6 +42,7 @@ type Store struct {
 	onChange func(storeState, storeState)
 }
 type storeOptions struct {
+	Limits           accountLimits
 	MailboxID        string
 	Database         string
 	SMTPFolder       string
@@ -279,6 +280,9 @@ func (b *Store) append(raw []byte, options appendOptions) (*storedMessage, bool,
 		}
 		if folder.NextUID == 0 || folder.NextUID == ^uint32(0) {
 			return errors.New("mailbox UID space exhausted")
+		}
+		if err := b.checkQuota(*state, 1, int64(len(raw))); err != nil {
+			return err
 		}
 		m.UID = folder.NextUID
 		folder.NextUID++

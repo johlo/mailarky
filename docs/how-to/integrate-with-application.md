@@ -30,3 +30,53 @@ to `default`.
 When running the binary outside Compose, enable STARTTLS with
 `MAILARKY_SMTP_TLS_MODE=starttls`, or explicitly allow local plaintext AUTH
 with `MAILARKY_SMTP_AUTH_ALLOW_INSECURE=true`. IMAP always uses implicit TLS.
+
+## Test OAuth authentication
+
+Configure local test tokens when creating the application's account:
+
+```sh
+curl -fsS http://localhost:8026/api/v1/accounts \
+  -H 'Content-Type: application/json' -d '{
+    "username":"app@example.test",
+    "oauth_tokens":[
+      {"token":"test-access-token"},
+      {"token":"old-access-token","status":"expired"},
+      {"token":"blocked-access-token","status":"rejected"}
+    ]
+  }'
+```
+
+Set the application to use **XOAUTH2**, the returned username, and
+`test-access-token` on SMTP and IMAP. The same TLS requirements apply as for
+password authentication. This exercises the SASL format used by
+[Microsoft 365](https://learn.microsoft.com/en-us/exchange/client-developer/legacy-protocols/how-to-authenticate-an-imap-pop-smtp-application-by-using-oauth)
+and [Gmail](https://developers.google.com/workspace/gmail/imap/xoauth2-protocol):
+base64 of `user=USERNAME\x01auth=Bearer TOKEN\x01\x01`.
+
+Use `old-access-token` to trigger an expired-token response, or
+`blocked-access-token` for rejection. For time-based expiry, give a token an
+`expires_at` RFC3339 timestamp. Test renewal by replacing the set while the
+application is running:
+
+```sh
+curl -fsS -X PUT http://localhost:8026/api/v1/accounts/ACCOUNT_ID/oauth-tokens \
+  -H 'Content-Type: application/json' -d '{
+    "tokens":[
+      {"token":"test-access-token","status":"expired"},
+      {"token":"refreshed-access-token"}
+    ]
+  }'
+```
+
+Make the application's token supplier return `refreshed-access-token` on
+refresh. Existing authenticated sessions remain usable, so reconnect to test
+authentication with the changed token. Use an account IDLE disconnect fault
+when testing that reconnect path.
+
+Mailarky tests mail authentication, not the OAuth HTTP flow. Stub the
+application's token endpoint or token supplier separately; no real Gmail or
+Microsoft tokens, app registrations, or provider connections are needed.
+See [token reference](../reference/http-api.md#test-oauth-tokens) for exact
+failure replies. Existing AUTH/AUTHENTICATE faults and deterministic sequences
+also apply to XOAUTH2, for example to reject only the third authentication.

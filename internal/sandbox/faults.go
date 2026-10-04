@@ -24,20 +24,27 @@ type faultTrigger struct {
 	Phase    string `json:"phase"`
 }
 type faultFilter struct {
-	Username string           `json:"username,omitempty"`
-	Folder   string           `json:"folder,omitempty"`
-	Message  *messageSelector `json:"message,omitempty"`
+	Username     string           `json:"username,omitempty"`
+	Folder       string           `json:"folder,omitempty"`
+	Message      *messageSelector `json:"message,omitempty"`
+	Notification string           `json:"notification,omitempty"`
+}
+type faultSequence struct {
+	Steps  []string `json:"steps"`
+	Repeat bool     `json:"repeat,omitempty"`
 }
 type faultRule struct {
-	Name        string       `json:"name"`
-	Enabled     bool         `json:"enabled"`
-	Trigger     faultTrigger `json:"trigger"`
-	Filter      faultFilter  `json:"filter"`
-	Action      faultAction  `json:"action"`
-	Probability *float64     `json:"probability,omitempty"`
-	MaxHits     uint64       `json:"max_hits,omitempty"`
-	Hits        uint64       `json:"hits"`
-	ExpiresAt   *time.Time   `json:"expires_at,omitempty"`
+	Name        string         `json:"name"`
+	Enabled     bool           `json:"enabled"`
+	Trigger     faultTrigger   `json:"trigger"`
+	Filter      faultFilter    `json:"filter"`
+	Action      faultAction    `json:"action"`
+	Probability *float64       `json:"probability,omitempty"`
+	MaxHits     uint64         `json:"max_hits,omitempty"`
+	Hits        uint64         `json:"hits"`
+	Matches     uint64         `json:"matches"`
+	Sequence    *faultSequence `json:"sequence,omitempty"`
+	ExpiresAt   *time.Time     `json:"expires_at,omitempty"`
 }
 
 // Each action has its own strict JSON schema. Irrelevant options are rejected.
@@ -58,6 +65,10 @@ type disconnectAction struct {
 	Type    string `json:"type"`
 	Silent  bool   `json:"silent,omitempty"`
 	Message string `json:"message,omitempty"`
+	AfterMS *int   `json:"after_ms,omitempty"`
+}
+type dropAction struct {
+	Type string `json:"type"`
 }
 type responseAction struct {
 	Type     string `json:"type"`
@@ -99,6 +110,8 @@ func (a *faultAction) UnmarshalJSON(data []byte) error {
 		a.Parameters = &delayAction{}
 	case "disconnect":
 		a.Parameters = &disconnectAction{}
+	case "drop":
+		a.Parameters = &dropAction{}
 	case "response":
 		a.Parameters = &responseAction{}
 	case "capabilities":
@@ -238,9 +251,11 @@ func (r *faultRegistry) put(t faultRule, create bool, scope string) error {
 	}
 	if !exists {
 		t.Hits = 0
+		t.Matches = 0
 		r.order = append(r.order, t.Name)
 	} else {
 		t.Hits = old.Hits
+		t.Matches = old.Matches
 	}
 	r.entries[t.Name] = t
 	return nil
@@ -271,6 +286,7 @@ func (r *faultRegistry) remove(name string) bool {
 
 type protocolEvent struct {
 	protocol, command, phase, username, folder string
+	notification                               string
 	message                                    *storedMessage
 	identityOnly                               bool
 }
@@ -305,6 +321,20 @@ func (r *faultRegistry) claim(e protocolEvent, capabilities bool) []faultRule {
 		}
 		if f.Message != nil && !f.Message.matches(e.message) {
 			continue
+		}
+		if f.Notification != "" && f.Notification != e.notification {
+			continue
+		}
+		t.Matches++
+		r.entries[name] = t
+		if t.Sequence != nil {
+			index := t.Matches - 1
+			if t.Sequence.Repeat {
+				index %= uint64(len(t.Sequence.Steps))
+			}
+			if index >= uint64(len(t.Sequence.Steps)) || t.Sequence.Steps[index] != "apply" {
+				continue
+			}
 		}
 		if t.Probability != nil && rand.Float64() >= *t.Probability {
 			continue
