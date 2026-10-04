@@ -134,6 +134,31 @@ can be replaced while the application runs to test refresh. Mailarky doesn't
 issue tokens; stub your application's token endpoint separately. See
 [test OAuth authentication](docs/how-to/integrate-with-application.md#test-oauth-authentication).
 
+## Use with coding agents
+
+The [`skills/mailarky`](skills/mailarky/SKILL.md) skill teaches coding agents
+to write tests against Mailarky: one account per test, authenticated SMTP,
+assertions that don't change read state, and valid fault rules. It follows the
+[Agent Skills](https://agentskills.io) standard, so the same folder works in
+Claude Code, Codex and other compatible agents. Only the install location
+differs:
+
+| Agent | One project | All projects |
+| --- | --- | --- |
+| Claude Code | `.claude/skills/` | `~/.claude/skills/` |
+| Codex | `.agents/skills/` | `~/.agents/skills/` |
+
+For example, to add it to a project for Claude Code (use `.agents/skills` for
+Codex):
+
+```sh
+mkdir -p .claude/skills
+curl -fsSL https://github.com/johlo/mailarky/archive/refs/heads/main.tar.gz |
+  tar -xz -C .claude/skills --strip-components=2 mailarky-main/skills/mailarky
+```
+
+Release archives include the skill for that version.
+
 ## Focus and boundaries
 
 - Raw MIME is the source of truth. HTTP inspection has no read-state side effects;

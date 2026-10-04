@@ -41,7 +41,7 @@ try:
                       "Subject: Welcome\r\nMessage-ID: <first@example.test>\r\n\r\nHello!")
 
     listing = api("GET", account_base + "/messages?query=folder:Sent")
-    assert listing["total"] == 1
+    assert listing["matched"] == 1
     message = api("GET", account_base + "/messages/" + listing["messages"][0]["id"])
     assert message["subject"] == "Welcome"
     assert message["read"] is False

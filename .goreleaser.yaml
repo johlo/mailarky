@@ -30,6 +30,7 @@ archives:
       - SECURITY.md
       - openapi.yaml
       - docs/**/*
+      - skills/**/*
       - testdata/tls/*
 
 checksum:
