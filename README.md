@@ -38,8 +38,7 @@ docker run -d --name mailarky \
 docker cp mailarky:/certs/server.crt ./mailarky.crt
 ```
 
-Release images become available after the first version tag is published.
-For unreleased source builds, see [run from source](docs/how-to/run-and-test.md#start-locally).
+To build from source instead, see [run from source](docs/how-to/run-and-test.md#start-locally).
 
 | Interface | Default address |
 | --- | --- |
