@@ -11,6 +11,13 @@ Use it for reply import, mailbox synchronization, retries, and parallel test
 suites. Each account's credentials work for **both SMTP and IMAP**: two tests
 can send to the same `alice@customer.test` address without sharing mail.
 
+Mailarky's protocol implementations are built on
+[emersion/go-imap v2](https://github.com/emersion/go-imap/tree/v2) for IMAP and
+[emersion/go-smtp](https://github.com/emersion/go-smtp) for SMTP. Mailarky uses
+[IMAP](https://github.com/johlo/go-imap/tree/imap-v2-protocol-hooks) and
+[SMTP](https://github.com/johlo/go-smtp/tree/smtp-protocol-hooks) forks that add
+the hooks needed for protocol fault injection.
+
 ## Quick start
 
 ```sh
