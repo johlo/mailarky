@@ -1,0 +1,34 @@
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    # The protocol forks are rebased and bumped by hand; see
+    # docs/how-to/run-and-test.md.
+    ignore:
+      - dependency-name: github.com/johlo/*
+    groups:
+      go-modules:
+        patterns: ['*']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    # A new Go release also needs go.mod changed, so only take patches and
+    # digest updates for the builder image.
+    ignore:
+      - dependency-name: golang
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+    groups:
+      base-images:
+        patterns: ['*']
