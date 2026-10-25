@@ -161,6 +161,11 @@ run `go get github.com/johlo/go-imap/v2@COMMIT` or
 `go get github.com/johlo/go-smtp@COMMIT`, then `go mod tidy`, `make test`, and
 the Docker smoke test. Run `make diagrams` after editing diagram sources.
 
+Dependabot opens weekly grouped updates for Go modules, GitHub Actions, and
+Docker base images. It skips the protocol forks and new Go releases, which
+need the steps above or a `go.mod` change. CI also runs weekly, including
+`govulncheck`, so new advisories surface without a push.
+
 ## Stop
 
 ```sh
