@@ -318,6 +318,7 @@ components:
             properties:
                 data:
                     additionalProperties: true
+                    description: For import events, messages counts new messages remaining after retention; deleted optionally counts existing messages removed by retention. Refresh the mailbox on an import event.
                     type: object
                 type:
                     enum:

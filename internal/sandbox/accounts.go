@@ -202,25 +202,32 @@ func (a *Account) importBatch(items []batchItem) ([]*storedMessage, int, error) 
 	return stored, duplicates, err
 }
 func (a *Account) changed(before, after storeState, bulk bool) {
-	added := 0
+	added, deleted := 0, 0
 	for id, m := range after.Messages {
 		if before.Messages[id] == nil {
 			added++
 			if !bulk {
 				a.notifier.publish(notification{"new", m.summary()})
 			}
-		} else if before.Messages[id] != m {
+		} else if !bulk && before.Messages[id] != m {
 			a.notifier.publish(notification{"update", m.summary()})
 		}
 	}
 	for id := range before.Messages {
 		if after.Messages[id] == nil {
 			a.deleted.Add(1)
-			a.notifier.publish(notification{"delete", map[string]string{"id": id}})
+			deleted++
+			if !bulk {
+				a.notifier.publish(notification{"delete", map[string]string{"id": id}})
+			}
 		}
 	}
-	if bulk && added > 0 {
-		a.notifier.publish(notification{"import", map[string]int{"messages": added}})
+	if bulk && (added > 0 || deleted > 0) {
+		data := map[string]int{"messages": added}
+		if deleted > 0 {
+			data["deleted"] = deleted
+		}
+		a.notifier.publish(notification{"import", data})
 	}
 }
 func (h *Service) available(a mailboxAccount) error {

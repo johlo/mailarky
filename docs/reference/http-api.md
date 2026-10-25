@@ -166,7 +166,10 @@ See the [fault guide](../how-to/fault-injection.md) and [OpenAPI](../../openapi.
 ## Notifications and metrics
 
 WebSocket events are account-local `new`, `update`, or `delete` notifications.
-An import sends a single `import` event with the number of new messages.
+An import sends a single `import` event whose `data.messages` counts new messages
+remaining after retention. When retention removes existing messages, the event
+also includes `data.deleted` instead of sending individual deletion events.
+Refresh the mailbox on an import event, including one with `messages: 0`.
 Slow subscribers are disconnected when their bounded queue fills. Webhooks
 receive a message summary after append, with `Mailarky-Mailbox` and optional
 `Mailarky-Label` headers. Delivery is asynchronous and retries up to three times.

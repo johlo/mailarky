@@ -98,6 +98,7 @@ func (a *accountAPI) importMessages(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, err)
 		return
 	}
+	defer body.Close()
 	im := &importer{maxSize: a.account.options.MaxSize}
 	switch media {
 	case "application/mbox":
@@ -114,6 +115,11 @@ func (a *accountAPI) importMessages(w http.ResponseWriter, r *http.Request) {
 	default:
 		apiError(w, 415, errors.New("Content-Type must be application/mbox or application/x-tar"))
 		return
+	}
+	if err == nil {
+		// Tar stops at its end markers, before any trailing padding or gzip
+		// checksum. Read to EOF so upload and integrity errors abort the batch.
+		_, err = io.Copy(io.Discard, body)
 	}
 	if err != nil {
 		apiError(w, 400, err)
@@ -140,12 +146,33 @@ func (a *accountAPI) importMessages(w http.ResponseWriter, r *http.Request) {
 }
 
 // decompress transparently accepts gzip, which exports are often shipped in.
-func decompress(r *bufio.Reader) (io.Reader, error) {
+func decompress(r *bufio.Reader) (io.ReadCloser, error) {
 	magic, _ := r.Peek(2)
 	if bytes.Equal(magic, []byte{0x1f, 0x8b}) {
 		return gzip.NewReader(r)
 	}
-	return r, nil
+	return io.NopCloser(r), nil
+}
+
+// readMboxLine retains at most limit bytes of a fragmented line and drains the
+// rest. Keep the prefix so the caller can still recognize a "From " separator.
+func readMboxLine(r *bufio.Reader, limit int64) (line []byte, oversized bool, err error) {
+	part, err := r.ReadSlice('\n')
+	if err != bufio.ErrBufferFull {
+		return part, int64(len(part)) > limit, err
+	}
+	for {
+		remaining := limit - int64(len(line))
+		if int64(len(part)) > remaining {
+			part = part[:remaining]
+			oversized = true
+		}
+		line = append(line, part...)
+		if err != bufio.ErrBufferFull {
+			return line, oversized, err
+		}
+		part, err = r.ReadSlice('\n')
+	}
 }
 
 // readMbox splits an mbox file on "From " lines that start the file, follow a
@@ -173,14 +200,9 @@ func (im *importer) readMbox(r io.Reader, folder string, gmail bool) error {
 		im.addMbox(source, append([]byte(nil), message...), separator, folder, gmail)
 	}
 	for {
-		line, err := lines.ReadSlice('\n')
-		if err == bufio.ErrBufferFull {
-			// ReadSlice's buffer is reused, so copy before reading the rest.
-			first := append([]byte(nil), line...)
-			var rest []byte
-			rest, err = lines.ReadBytes('\n')
-			line = append(first, rest...)
-		}
+		// Allow for CRLF and mbox quoting; the normalized message is checked
+		// against maxSize below, before growing its buffer.
+		line, lineTooLong, err := readMboxLine(lines, im.maxSize+4)
 		if err != nil && err != io.EOF {
 			return fmt.Errorf("read mbox: %w", err)
 		}
@@ -188,26 +210,26 @@ func (im *importer) readMbox(r io.Reader, folder string, gmail bool) error {
 			break
 		}
 		text := bytes.TrimRight(line, "\r\n")
-		if bytes.HasPrefix(text, []byte("From ")) && (blank || !separatorDate(string(text)).IsZero()) {
+		if bytes.HasPrefix(text, []byte("From ")) && (blank || (!lineTooLong && !separatorDate(string(text)).IsZero())) {
 			flush()
 			count++
 			raw.Reset()
-			separator, oversized, blank = string(text), false, false
+			separator, oversized, blank = string(text), lineTooLong, false
 		} else {
 			if count == 0 {
-				if len(bytes.TrimSpace(text)) == 0 {
+				if !lineTooLong && len(bytes.TrimSpace(text)) == 0 {
 					continue
 				}
 				return errors.New("not an mbox file: it must start with a \"From \" line")
 			}
-			blank = len(text) == 0
+			blank = len(text) == 0 && !lineTooLong
 			if quoted := bytes.TrimLeft(text, ">"); len(quoted) < len(text) && bytes.HasPrefix(quoted, []byte("From ")) {
 				text = text[1:]
 			}
+			oversized = oversized || lineTooLong || int64(raw.Len())+int64(len(text))+2 > im.maxSize+2
 			if !oversized {
 				raw.Write(text)
 				raw.WriteString("\r\n")
-				oversized = int64(raw.Len()) > im.maxSize+2
 			}
 		}
 		if err == io.EOF {

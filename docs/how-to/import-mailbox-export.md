@@ -110,6 +110,10 @@ as for any new mail.
 
 The import does not trigger webhooks. WebSocket subscribers get a single
 `import` event, `{"type":"import","data":{"messages":18412}}`.
+`messages` counts new messages remaining after retention. If retention removes
+existing messages, the same event includes their count in `deleted`, for example
+`{"type":"import","data":{"messages":128,"deleted":128}}`. It replaces
+individual deletion events; refresh the mailbox when receiving an import event.
 
 ## Size and reuse
 

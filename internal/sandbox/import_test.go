@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -239,6 +240,169 @@ func TestImportIsAllOrNothingWithinQuota(t *testing.T) {
 	importCall(t, controlHandler(a), "", "application/mbox", []byte(mbox.String()), 507)
 	if n := len(a.snapshot()); n != 1 {
 		t.Fatalf("partial import: %d messages", n)
+	}
+}
+
+func TestImportMboxDiscardsOversizedLines(t *testing.T) {
+	const limit = 1024
+	// Exceed both the message limit and the line reader's buffer, then ensure
+	// the next message is still found. Measure only the importer's allocations.
+	input := "From x Tue Jan  2 03:04:05 2024\nFrom: a@test\n\n" +
+		strings.Repeat("x", 32<<20) + "\n\n" +
+		"From x Tue Jan  2 03:04:05 2024\nFrom: a@test\nMessage-ID: <after@test>\n\nbody\n\n"
+	im := &importer{maxSize: limit}
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	err := im.readMbox(strings.NewReader(input), "INBOX", false)
+	runtime.ReadMemStats(&after)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if im.report.Skipped != 1 || len(im.items) != 1 || im.items[0].Parsed.detail.MessageID != "after@test" {
+		t.Fatalf("skipped=%d items=%+v", im.report.Skipped, im.items)
+	}
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 8<<20 {
+		t.Fatalf("allocated %d bytes to skip a line with a %d-byte message limit", allocated, limit)
+	}
+}
+
+func TestImportMboxLongLineBoundaries(t *testing.T) {
+	header := "From: a@test\r\nMessage-ID: <long@test>\r\n\r\n"
+	body := "From " + strings.Repeat("x", 64<<10)
+	want := header + body + "\r\n"
+	for _, ending := range []string{"\n", "\r\n", ""} {
+		for _, limit := range []int64{int64(len(want)), int64(len(want)) - 1, 1024} {
+			t.Run(fmt.Sprintf("ending=%q/limit=%d", ending, limit), func(t *testing.T) {
+				input := "From x Tue Jan  2 03:04:05 2024\r\n" + header + ">" + body + ending
+				im := &importer{maxSize: limit}
+				if err := im.readMbox(strings.NewReader(input), "INBOX", false); err != nil {
+					t.Fatal(err)
+				}
+				if limit < int64(len(want)) {
+					if im.report.Skipped != 1 || len(im.items) != 0 {
+						t.Fatalf("oversized message: skipped=%d items=%d", im.report.Skipped, len(im.items))
+					}
+				} else if im.report.Skipped != 0 || len(im.items) != 1 || string(im.items[0].Raw) != want {
+					t.Fatalf("valid long line was skipped or changed: skipped=%d items=%d", im.report.Skipped, len(im.items))
+				}
+			})
+		}
+	}
+}
+
+func TestImportRejectsCorruptGzipBeforeCommit(t *testing.T) {
+	archive := maildirTar(t, map[string]time.Time{"Work/cur/message:2,S": time.Unix(1700000000, 0)})
+	// Tar writers can pad beyond the two end-of-archive blocks. The gzip
+	// checksum must be validated even though tar stops before this padding.
+	archive = append(archive, make([]byte, 8192)...)
+	for contentType, source := range map[string][]byte{
+		"application/x-tar": archive,
+		"application/mbox":  []byte(takeout),
+	} {
+		compressed := gzipped(t, source)
+		corrupt := append([]byte(nil), compressed...)
+		corrupt[len(corrupt)-8] ^= 1
+		for name, body := range map[string][]byte{
+			"bad checksum":   corrupt,
+			"missing footer": compressed[:len(compressed)-8],
+		} {
+			t.Run(contentType+"/"+name, func(t *testing.T) {
+				a := testStore(t, defaultConfig())
+				existing := appendTest(t, a, "existing@test")
+				events, unsubscribe := a.notifier.subscribe()
+				defer unsubscribe()
+				importCall(t, controlHandler(a), "", contentType, body, 400)
+				if got := a.snapshot(); len(got) != 1 || got[0].ID != existing.ID {
+					t.Fatalf("corrupt upload changed stored messages: %+v", got)
+				}
+				a.mu.RLock()
+				_, created := a.state.Folders["Work"]
+				a.mu.RUnlock()
+				if created {
+					t.Fatal("corrupt upload created a folder")
+				}
+				select {
+				case event := <-events:
+					t.Fatalf("corrupt upload emitted an event: %+v", event)
+				default:
+				}
+			})
+		}
+	}
+}
+
+func TestImportRetentionSendsOneEvent(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.MaxMessages = 128
+	a := testStore(t, cfg)
+	mbox := func(prefix string) []byte {
+		var out strings.Builder
+		for i := 0; i < cfg.MaxMessages; i++ {
+			fmt.Fprintf(&out, "From x Tue Jan  2 03:04:05 2024\nFrom: a@test\nMessage-ID: <%s-%d@test>\n\nbody\n\n", prefix, i)
+		}
+		return []byte(out.String())
+	}
+	importCall(t, controlHandler(a), "", "application/mbox", mbox("old"), 200)
+	events, unsubscribe := a.notifier.subscribe()
+	defer unsubscribe()
+	importCall(t, controlHandler(a), "", "application/mbox", mbox("new"), 200)
+	want := map[string]int{"messages": 128, "deleted": 128}
+	select {
+	case event, ok := <-events:
+		if !ok || event.Type != "import" || !reflect.DeepEqual(event.Data, want) {
+			t.Fatalf("expected one import event, got %+v (open=%v)", event, ok)
+		}
+	default:
+		t.Fatal("missing import event")
+	}
+	select {
+	case event, ok := <-events:
+		t.Fatalf("unexpected extra event or subscriber closure: %+v (open=%v)", event, ok)
+	default:
+	}
+	if deleted := a.deleted.Load(); deleted != 128 {
+		t.Fatalf("deleted metric=%d, want 128", deleted)
+	}
+	// The subscription must still deliver ordinary notifications afterwards.
+	appendTest(t, a, "following@test")
+	select {
+	case event, ok := <-events:
+		if !ok || event.Type != "new" {
+			t.Fatalf("subscriber did not survive import: %+v (open=%v)", event, ok)
+		}
+	default:
+		t.Fatal("missing subsequent message event")
+	}
+}
+
+func TestImportRetentionWithoutNewMessages(t *testing.T) {
+	a := testStore(t, defaultConfig())
+	existing := appendTest(t, a, "old@test")
+	// Enable age retention without its periodic worker so only the import
+	// can prune the expired message in this test.
+	a.options.MaxAge = time.Hour
+	if err := a.mutate(func(state *storeState) error {
+		old := cloneRecord(state.Messages[existing.ID])
+		old.Created = time.Now().Add(-2 * time.Hour)
+		state.Messages[old.ID] = old
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	events, unsubscribe := a.notifier.subscribe()
+	defer unsubscribe()
+	importCall(t, controlHandler(a), "", "application/mbox", nil, 200)
+	select {
+	case event := <-events:
+		if event.Type != "import" || !reflect.DeepEqual(event.Data, map[string]int{"messages": 0, "deleted": 1}) {
+			t.Fatalf("unexpected event: %+v", event)
+		}
+	default:
+		t.Fatal("missing retention-only import event")
+	}
+	if len(a.snapshot()) != 0 || a.deleted.Load() != 1 {
+		t.Fatal("expired message was not removed and counted")
 	}
 }
 
