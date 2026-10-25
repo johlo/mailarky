@@ -355,15 +355,11 @@ func TestImportPythonWrittenFixtures(t *testing.T) {
 	if report := importCall(t, h, "?folder=Python", "application/mbox", mbox, 200); report.Imported != 4 || report.Skipped != 0 {
 		t.Fatalf("%+v", report)
 	}
-	var archive bytes.Buffer
-	w := tar.NewWriter(&archive)
-	if err := w.AddFS(os.DirFS("../../testdata/import/python-maildir")); err != nil {
+	archive, err := os.ReadFile("../../testdata/import/python-maildir.tar")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
-	report := importCall(t, h, "", "application/x-tar", archive.Bytes(), 200)
+	report := importCall(t, h, "", "application/x-tar", archive, 200)
 	if want := map[string]int{"INBOX": 2, "Work/Projects": 2}; report.Imported != 4 || !reflect.DeepEqual(report.Folders, want) {
 		t.Fatalf("%+v", report)
 	}
@@ -397,6 +393,10 @@ func TestImportPythonWrittenFixtures(t *testing.T) {
 	}
 	if m := got["python-1@example.test"]; !m.InternalDate.Equal(time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)) {
 		t.Fatal(m.InternalDate)
+	}
+	// The archive's file times order the Maildir import.
+	if got["python-10@example.test"].UID != 1 || got["python-11@example.test"].UID != 2 || got["python-13@example.test"].UID != 2 {
+		t.Fatal("Maildir UIDs must follow file modification times")
 	}
 	// Python writes mboxo, which quotes only "From " lines; the importer reads
 	// mboxrd, so a line that already began with ">From " loses one ">". The

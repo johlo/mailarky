@@ -7,8 +7,11 @@ with the code. Run from the repository root; the output is deterministic.
 """
 from email.message import EmailMessage
 import mailbox
+import os
 from pathlib import Path
 import shutil
+import tarfile
+import tempfile
 
 out = Path("testdata/import")
 when = (2024, 1, 2, 3, 4, 5, 1, 2, 0)  # struct_time for "From " lines
@@ -28,8 +31,8 @@ def message(number, subject, body, attachment=None):
     return m
 
 
-shutil.rmtree(out, ignore_errors=True)
-out.mkdir(parents=True)
+out.mkdir(parents=True, exist_ok=True)
+(out / "python.mbox").unlink(missing_ok=True)
 
 box = mailbox.mbox(out / "python.mbox")
 for number, subject, body, flags, attachment in [
@@ -46,7 +49,10 @@ for number, subject, body, flags, attachment in [
 box.close()
 
 # Maildir file names normally include time, PID and hostname; use fixed ones.
-root = mailbox.Maildir(out / "python-maildir", create=True)
+# The Maildir is committed as a tar: ":" is not allowed in Windows file names,
+# and the archive keeps the modification times that order the import.
+staging = Path(tempfile.mkdtemp()) / "maildir"
+root = mailbox.Maildir(staging, create=True)
 work = root.add_folder("Work.Projects")
 for folder, name, subdir, flags, number, subject in [
     (root, "1704164645.M1P1.fixture", "cur", "SF", 10, "Seen and flagged"),
@@ -60,6 +66,22 @@ for folder, name, subdir, flags, number, subject in [
     key = folder.add(m)
     current = Path(folder._path) / folder._lookup(key)
     suffix = ":2," + flags if subdir == "cur" else ""
-    current.rename(current.with_name(name + suffix))
-for tmp in out.glob("python-maildir/**/tmp"):
-    tmp.rmdir()
+    target = current.with_name(name + suffix)
+    current.rename(target)
+    seconds = int(name.split(".")[0])
+    os.utime(target, (seconds, seconds))
+
+
+def normalize(info):
+    info.uid = info.gid = 0
+    info.uname = info.gname = ""
+    info.mode = 0o755 if info.isdir() else 0o644
+    if info.isdir() or info.name.endswith("maildirfolder"):
+        info.mtime = 1704164645
+    return info
+
+
+with tarfile.open(out / "python-maildir.tar", "w", format=tarfile.PAX_FORMAT) as archive:
+    for path in sorted(staging.rglob("*")):
+        archive.add(path, arcname=path.relative_to(staging).as_posix(), recursive=False, filter=normalize)
+shutil.rmtree(staging.parent)
