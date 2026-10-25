@@ -141,8 +141,12 @@ func (s *imapSession) Append(name string, r imap.LiteralReader, options *imap.Ap
 	if err != nil {
 		return nil, imapNo(err)
 	}
-	_, err = s.account.append(raw, appendOptions{Folder: name, Date: options.Time, Flags: stringFlags(options.Flags), Notify: true})
-	return nil, imapDestinationError(err)
+	data := new(imap.AppendData)
+	_, err = s.account.append(raw, appendOptions{Folder: name, Date: options.Time, Flags: stringFlags(options.Flags), Notify: true, UIDResult: data})
+	if err != nil || data.UID == 0 {
+		return nil, imapDestinationError(err)
+	}
+	return data, nil
 }
 func (s *imapSession) AppendLimit() uint32 {
 	return uint32(min(s.service.config.MaxSize, int64(^uint32(0))))
@@ -163,7 +167,8 @@ func (s *imapSession) Copy(set imap.NumSet, dest string) (*imap.CopyData, error)
 	if s.selected == nil {
 		return nil, imapNo(errors.New("select a mailbox first"))
 	}
-	return nil, imapDestinationError(s.selected.CopyMessages(set, dest))
+	data, err := s.selected.CopyMessages(set, dest)
+	return data, imapDestinationError(err)
 }
 func (s *imapSession) Store(_ *imapserver.FetchWriter, set imap.NumSet, flags *imap.StoreFlags, _ *imap.StoreOptions) error {
 	if s.selected == nil {

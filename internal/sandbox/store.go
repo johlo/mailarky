@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/johlo/go-imap/v2"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -22,11 +23,13 @@ type folderState struct {
 	NextUID    uint32
 	Subscribed bool
 	Validity   uint32
+	Metadata   map[string][]byte `json:",omitempty"`
 }
 type storeState struct {
 	Folders  map[string]folderState
 	Messages map[string]*storedMessage
 	Sequence uint64
+	Metadata map[string][]byte `json:",omitempty"`
 }
 
 // Store owns only immutable message snapshots, folder state and persistence.
@@ -92,11 +95,13 @@ func openStore(c storeOptions) (*Store, error) {
 				var meta struct {
 					Folders  map[string]folderState
 					Sequence uint64
+					Metadata map[string][]byte
 				}
 				if err := json.Unmarshal(data, &meta); err != nil {
 					return err
 				}
 				b.state.Folders, b.state.Sequence = meta.Folders, meta.Sequence
+				b.state.Metadata = meta.Metadata
 			}
 			return tx.Bucket([]byte("messages")).ForEach(func(_, value []byte) error {
 				var m storedMessage
@@ -180,7 +185,7 @@ func (b *Store) commit(change func(*storeState) error, bulk bool) error {
 	default:
 	}
 	before := b.state
-	next := storeState{Folders: make(map[string]folderState, len(before.Folders)), Messages: make(map[string]*storedMessage, len(before.Messages)), Sequence: before.Sequence}
+	next := storeState{Folders: make(map[string]folderState, len(before.Folders)), Messages: make(map[string]*storedMessage, len(before.Messages)), Sequence: before.Sequence, Metadata: before.Metadata}
 	for name, f := range before.Folders {
 		next.Folders[name] = f
 	}
@@ -195,7 +200,8 @@ func (b *Store) commit(change func(*storeState) error, bulk bool) error {
 			meta, err := json.Marshal(struct {
 				Folders  map[string]folderState
 				Sequence uint64
-			}{next.Folders, next.Sequence})
+				Metadata map[string][]byte `json:",omitempty"`
+			}{next.Folders, next.Sequence, next.Metadata})
 			if err != nil {
 				return err
 			}
@@ -246,6 +252,9 @@ type appendOptions struct {
 	Username string
 	Notify   bool
 	Parsed   *parsedMessage
+	// UIDResult is filled inside the same transaction that assigns the UID.
+	// Duplicate suppression in another folder leaves it empty.
+	UIDResult *imap.AppendData
 }
 
 func (b *Store) append(raw []byte, options appendOptions) (*storedMessage, bool, error) {
@@ -276,6 +285,9 @@ func (b *Store) append(raw []byte, options appendOptions) (*storedMessage, bool,
 			for _, old := range state.Messages {
 				if old.Detail.MessageID == d.MessageID {
 					duplicate = old
+					if old.Folder == options.Folder && options.UIDResult != nil {
+						*options.UIDResult = imap.AppendData{UIDValidity: folder.Validity, UID: imap.UID(old.UID)}
+					}
 					return nil
 				}
 			}
@@ -287,6 +299,9 @@ func (b *Store) append(raw []byte, options appendOptions) (*storedMessage, bool,
 			return err
 		}
 		m.UID = folder.NextUID
+		if options.UIDResult != nil {
+			*options.UIDResult = imap.AppendData{UIDValidity: folder.Validity, UID: imap.UID(m.UID)}
+		}
 		folder.NextUID++
 		state.Folders[folder.Name] = folder
 		state.Sequence++

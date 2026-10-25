@@ -29,6 +29,12 @@ A client-sent `CONNECT` line does not trigger greeting rules. Greeting and TLS
 faults cannot target an account, since authentication has not identified one.
 Authentication, TLS negotiation, and logout faults require `before` phase.
 
+`GETMETADATA`, `SETMETADATA`, and `UID EXPUNGE` support `before` and `after`
+faults. Metadata folder filters match the command's mailbox argument; server
+annotations (`""`) do not inherit the selected folder. A SETMETADATA `before`
+fault prevents the update, including rejecting a synchronizing value literal
+before accepting it. An `after` fault changes the reply after storage commits.
+
 SMTP account MAIL rules require AUTH to identify the account at MAIL. Anonymous
 SMTP chooses accounts at RCPT; a MAIL rule is never deferred to RCPT. For an
 anonymous sender failure, use a server MAIL rule with an exact sender filter.

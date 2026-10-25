@@ -114,7 +114,37 @@ try:
         status, data = imap.fetch("1", "(FLAGS BODY.PEEK[])")
         assert status == "OK" and b"\\Flagged" in data[0][0] and b"\\Seen" in data[0][0], data
         assert data[0][1].endswith(b"\r\n\r\nFrom the archive\r\n"), data
-    print("Authenticated SMTP, fan-out, HTTP inspection, verified TLS IMAP, read flags, faults, recovery and mailbox import passed")
+    with imaplib.IMAP4_SSL(host, imap_port, ssl_context=context, timeout=10) as imap:
+        imap.login(first["username"], first["password"])
+        capabilities = imap.capability()[1][0].split()
+        assert b"METADATA" in capabilities and b"UIDPLUS" in capabilities
+        assert imap.xatom("SETMETADATA", '""', '(/private/vendor/alps/settings "saved-settings")')[0] == "OK"
+        assert imap.xatom("GETMETADATA", "(DEPTH infinity)", '""', "/private/vendor/alps")[0] == "OK"
+        assert b'"/private/vendor/alps/settings" "saved-settings"' in imap.response("METADATA")[1][0]
+        assert imap.create("UIDPlusSmoke")[0] == "OK"
+        assert imap.create("UIDPlusCopy")[0] == "OK"
+        validity = None
+        for uid in range(1, 4):
+            assert imap.append("UIDPlusSmoke", None, None, mime(f"uidplus-{uid}@example.test"))[0] == "OK"
+            epoch, assigned = imap.response("APPENDUID")[1][0].split()
+            assert int(assigned) == uid and int(epoch) > 0
+            assert validity is None or validity == epoch
+            validity = epoch
+        assert imap.select("UIDPlusSmoke")[0] == "OK"
+        assert imap.uid("COPY", "1,3", "UIDPlusCopy")[0] == "OK"
+        epoch, source, destination = imap.response("COPYUID")[1][0].split()
+        assert int(epoch) > 0 and source == b"1,3" and destination == b"1:2"
+        assert imap.uid("STORE", "1:2", "+FLAGS", r"(\Deleted)")[0] == "OK"
+        assert imap.uid("EXPUNGE", "2:3")[0] == "OK"
+        assert imap.uid("SEARCH", None, "ALL")[1][0] == b"1 3"
+    for account in accounts:
+        with imaplib.IMAP4_SSL(host, imap_port, ssl_context=context, timeout=10) as imap:
+            imap.login(account["username"], account["password"])
+            assert imap.xatom("GETMETADATA", '""', "/private/vendor/alps/settings")[0] == "OK"
+            value = imap.response("METADATA")[1][0]
+            expected = b'"saved-settings"' if account == first else b"NIL"
+            assert expected in value, value
+    print("SMTP, HTTP, TLS IMAP, faults, import, METADATA isolation and UIDPLUS passed")
 finally:
     for account in accounts:
         api("DELETE", "/api/v1/accounts/" + account["id"])

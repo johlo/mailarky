@@ -21,7 +21,7 @@ func imapEvent(c *imapserver.Conn, cmd *imapserver.Command, phase string) protoc
 		}
 	}
 	switch cmd.Name {
-	case "SELECT", "EXAMINE", "STATUS", "CREATE", "DELETE", "RENAME", "SUBSCRIBE", "UNSUBSCRIBE", "APPEND":
+	case "SELECT", "EXAMINE", "STATUS", "CREATE", "DELETE", "RENAME", "SUBSCRIBE", "UNSUBSCRIBE", "APPEND", "GETMETADATA", "SETMETADATA":
 		e.folder = cmd.Mailbox
 	case "LIST", "LSUB", "LOGIN", "AUTHENTICATE", "CAPABILITY", "NOOP", "LOGOUT", "STARTTLS", "CONNECT":
 		e.folder = ""
@@ -30,7 +30,7 @@ func imapEvent(c *imapserver.Conn, cmd *imapserver.Command, phase string) protoc
 }
 func newIMAPServer(service *Service) *imapserver.Server {
 	options := &imapserver.Options{
-		Caps: imap.CapSet{imap.CapIMAP4rev1: {}},
+		Caps: imap.CapSet{imap.CapIMAP4rev1: {}, imap.CapMetadata: {}, imap.CapUIDPlus: {}},
 		NewSession: func(c *imapserver.Conn) (imapserver.Session, *imapserver.GreetingData, error) {
 			return &imapSession{service: service, conn: c}, nil, nil
 		},

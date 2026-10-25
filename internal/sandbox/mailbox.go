@@ -113,7 +113,8 @@ func (u *mailboxUser) RenameMailbox(from, to string) error {
 		return errors.New("invalid destination folder")
 	}
 	return u.store.mutate(func(s *storeState) error {
-		if _, ok := s.Folders[from]; !ok {
+		original, ok := s.Folders[from]
+		if !ok {
 			return errNoSuchMailbox
 		}
 		if _, ok := s.Folders[to]; ok {
@@ -143,7 +144,7 @@ func (u *mailboxUser) RenameMailbox(from, to string) error {
 			}
 		}
 		if from == "INBOX" {
-			s.Folders[from] = folderState{Name: from, NextUID: 1, Subscribed: true, Validity: newValidity()}
+			s.Folders[from] = folderState{Name: from, NextUID: 1, Subscribed: true, Validity: newValidity(), Metadata: original.Metadata}
 		}
 		return nil
 	})
@@ -277,16 +278,24 @@ func (m *mailbox) UpdateMessagesFlags(set imap.NumSet, flags *imap.StoreFlags) e
 	}
 	return err
 }
-func (m *mailbox) CopyMessages(set imap.NumSet, dest string) error {
+func (m *mailbox) CopyMessages(set imap.NumSet, dest string) (*imap.CopyData, error) {
+	if strings.EqualFold(dest, "INBOX") {
+		dest = "INBOX"
+	}
 	records, err := m.records()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return m.store.mutate(func(s *storeState) error {
+	data := new(imap.CopyData)
+	err = m.store.mutate(func(s *storeState) error {
 		folder, ok := s.Folders[dest]
 		if !ok {
 			return errNoSuchMailbox
 		}
+		if source, ok := s.Folders[m.name]; !ok || source.Validity != m.validity {
+			return errors.New("source mailbox UIDVALIDITY changed; select it again")
+		}
+		data.UIDValidity = folder.Validity
 		var copies []*storedMessage
 		var bytes int64
 		for i, record := range records {
@@ -294,7 +303,7 @@ func (m *mailbox) CopyMessages(set imap.NumSet, dest string) error {
 				continue
 			}
 			current := s.Messages[record.ID]
-			if current == nil {
+			if current == nil || current.Folder != m.name || current.UID != record.UID {
 				continue
 			}
 			copies = append(copies, current)
@@ -306,13 +315,15 @@ func (m *mailbox) CopyMessages(set imap.NumSet, dest string) error {
 			}
 		}
 		for _, current := range copies {
-			if folder.NextUID == ^uint32(0) {
+			if folder.NextUID == 0 || folder.NextUID == ^uint32(0) {
 				return errors.New("UID space exhausted")
 			}
 			copy := cloneRecord(current)
 			copy.ID = uuid.NewString()
 			copy.Folder = dest
 			copy.UID = folder.NextUID
+			data.SourceUIDs.AddNum(imap.UID(current.UID))
+			data.DestUIDs.AddNum(imap.UID(copy.UID))
 			folder.NextUID++
 			s.Sequence++
 			copy.Sequence = s.Sequence
@@ -323,12 +334,20 @@ func (m *mailbox) CopyMessages(set imap.NumSet, dest string) error {
 		m.store.pruneState(s, time.Now())
 		return nil
 	})
+	if err != nil || len(data.SourceUIDs) == 0 {
+		return nil, err
+	}
+	return data, nil
 }
 func (m *mailbox) Expunge(uids *imap.UIDSet) error {
 	return m.store.mutate(func(s *storeState) error {
-		for id, record := range s.Messages {
-			if record.Folder == m.name && hasFlag(record.Flags, string(imap.FlagDeleted)) && (uids == nil || uids.Contains(imap.UID(record.UID))) {
-				delete(s.Messages, id)
+		if source, ok := s.Folders[m.name]; !ok || source.Validity != m.validity {
+			return errors.New("mailbox UIDVALIDITY changed; select it again")
+		}
+		records := orderedMessages(*s, m.name)
+		for i, record := range records {
+			if hasFlag(record.Flags, string(imap.FlagDeleted)) && (uids == nil || selected(*uids, uint32(i+1), record, records)) {
+				delete(s.Messages, record.ID)
 			}
 		}
 		return nil

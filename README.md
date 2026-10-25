@@ -173,7 +173,9 @@ Release archives include the skill for that version.
 - Selected IMAP sessions track their own sequence numbers. External changes
   produce EXISTS, EXPUNGE, and flag updates at safe command boundaries and during IDLE.
 - Storage is in memory by default. Optional bbolt persistence preserves accounts,
-  credentials, messages, and UID identity. Fault rules are ephemeral.
+  credentials, messages, IMAP metadata, and UID identity. Fault rules are ephemeral.
+- IMAP supports METADATA for client settings and UIDPLUS for tracking appended
+  and copied messages and selectively expunging deleted mail.
 - Retention is unlimited by default. Optional retention prunes old mail; storage
   quotas reject new mail without evicting fixtures. Both span an account's folders.
 - Mail is captured locally. There is no relay, forwarding, POP3, or built-in webmail UI.

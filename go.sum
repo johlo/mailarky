@@ -8,8 +8,8 @@ github.com/emersion/go-sasl v0.0.0-20241020182733-b788ff22d5a6 h1:oP4q0fw+fOSWn3
 github.com/emersion/go-sasl v0.0.0-20241020182733-b788ff22d5a6/go.mod h1:iL2twTeMvZnrg54ZoPDNfJaJaqy0xIQFuBdrLsmspwQ=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
-github.com/johlo/go-imap/v2 v2.0.0-beta.8.0.20261004144314-85308024550f h1:AmhO3HE2Apzd0Jc9xvCzqrY+QXM1AR1M/HJ7b4mzWeU=
-github.com/johlo/go-imap/v2 v2.0.0-beta.8.0.20261004144314-85308024550f/go.mod h1:f+Pc/+EeZ4/PLh/WXuZpyBOj6MeZc1On66nEES+ijvY=
+github.com/johlo/go-imap/v2 v2.0.0-beta.8.0.20261025212126-30a2f2dc7adf h1:qQRPmFbVpmJbf//VWuFuoh+8P3Pr7GXnXDF2wnZS9ts=
+github.com/johlo/go-imap/v2 v2.0.0-beta.8.0.20261025212126-30a2f2dc7adf/go.mod h1:f+Pc/+EeZ4/PLh/WXuZpyBOj6MeZc1On66nEES+ijvY=
 github.com/johlo/go-smtp v0.25.1-0.20261004142717-6530c2c7bb39 h1:wWsh/vxaqBRn4pwMvnlamG2iynCZ2uQg1pP+86tNSZQ=
 github.com/johlo/go-smtp v0.25.1-0.20261004142717-6530c2c7bb39/go.mod h1:t2I7/i7v5UaJuN6Nz+ztdCcLw4/ezVcA3AV5MJW3Z3I=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
