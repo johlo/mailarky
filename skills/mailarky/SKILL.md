@@ -122,6 +122,11 @@ unusual MIME, POST a raw `.eml` with `Content-Type: message/rfc822` and
 others with `POST {api_base}/folders` and `{"name": "History"}`. Seeded mail is visible over IMAP immediately, including
 to a client that is idling.
 
+For many messages, POST an mbox file to `{api_base}/import` with
+`Content-Type: application/mbox` and optional `?folder=`, or a Maildir tar with
+`application/x-tar`. Add `?labels=gmail` for a Google Takeout export.
+One request stores everything in a single commit.
+
 ## 5. Check what the application did
 
 ```sh

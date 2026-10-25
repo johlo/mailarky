@@ -193,10 +193,22 @@ func (a *Account) append(raw []byte, options appendOptions) (*storedMessage, err
 	}
 	return m, err
 }
-func (a *Account) changed(before, after storeState) {
+
+// importBatch stores parsed messages without webhooks; WebSocket subscribers
+// get a single import event so a large import cannot overflow their queue.
+func (a *Account) importBatch(items []batchItem) ([]*storedMessage, int, error) {
+	stored, duplicates, err := a.Store.appendBatch(items)
+	a.ignored.Add(uint64(duplicates))
+	return stored, duplicates, err
+}
+func (a *Account) changed(before, after storeState, bulk bool) {
+	added := 0
 	for id, m := range after.Messages {
 		if before.Messages[id] == nil {
-			a.notifier.publish(notification{"new", m.summary()})
+			added++
+			if !bulk {
+				a.notifier.publish(notification{"new", m.summary()})
+			}
 		} else if before.Messages[id] != m {
 			a.notifier.publish(notification{"update", m.summary()})
 		}
@@ -206,6 +218,9 @@ func (a *Account) changed(before, after storeState) {
 			a.deleted.Add(1)
 			a.notifier.publish(notification{"delete", map[string]string{"id": id}})
 		}
+	}
+	if bulk && added > 0 {
+		a.notifier.publish(notification{"import", map[string]int{"messages": added}})
 	}
 }
 func (h *Service) available(a mailboxAccount) error {

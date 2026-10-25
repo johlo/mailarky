@@ -30,7 +30,8 @@ type storeState struct {
 }
 
 // Store owns only immutable message snapshots, folder state and persistence.
-// Its change callback runs after commit and must not read the store or block.
+// Its change callback runs after commit and must not read the store or block;
+// bulk is set for imports, which report one event instead of one per message.
 type Store struct {
 	mu       sync.RWMutex
 	state    storeState
@@ -39,7 +40,7 @@ type Store struct {
 	done     chan struct{}
 	closed   sync.Once
 	changed  chan struct{}
-	onChange func(storeState, storeState)
+	onChange func(before, after storeState, bulk bool)
 }
 type storeOptions struct {
 	Limits           accountLimits
@@ -169,7 +170,8 @@ func cloneRecord(m *storedMessage) *storedMessage {
 	return &copy
 }
 
-func (b *Store) mutate(change func(*storeState) error) error {
+func (b *Store) mutate(change func(*storeState) error) error { return b.commit(change, false) }
+func (b *Store) commit(change func(*storeState) error, bulk bool) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	select {
@@ -229,7 +231,7 @@ func (b *Store) mutate(change func(*storeState) error) error {
 	close(b.changed)
 	b.changed = make(chan struct{})
 	if b.onChange != nil {
-		b.onChange(before, next)
+		b.onChange(before, next, bulk)
 	}
 
 	return nil
@@ -299,22 +301,104 @@ func (b *Store) append(raw []byte, options appendOptions) (*storedMessage, bool,
 	if duplicate != nil {
 		return duplicate, false, nil
 	}
-	if b.options.DumpPath != "" {
-		if err := os.MkdirAll(b.options.DumpPath, 0700); err != nil {
-			log.Printf("message stored but dump directory failed: %v", err)
-		}
+	b.dump(m)
+	return m, true, nil
+}
+
+func (b *Store) dump(messages ...*storedMessage) {
+	if b.options.DumpPath == "" || len(messages) == 0 {
+		return
+	}
+	if err := os.MkdirAll(b.options.DumpPath, 0700); err != nil {
+		log.Printf("message stored but dump directory failed: %v", err)
+	}
+	for _, m := range messages {
 		if err := os.WriteFile(filepath.Join(b.options.DumpPath, m.ID+".eml"), m.Raw, 0600); err != nil {
 			log.Printf("message stored but dump failed: %v", err)
 		}
 	}
-	return m, true, nil
 }
 
+// batchItem is a message that has already been parsed and size-checked.
+type batchItem struct {
+	Raw    []byte
+	Folder string
+	Date   time.Time
+	Flags  []string
+	Parsed parsedMessage
+}
+
+// appendBatch stores all items in one mutation, creating missing folders.
+// Either every non-duplicate item is stored or none is. One commit, one
+// retention pass and one change event keep large imports linear.
+func (b *Store) appendBatch(items []batchItem) (stored []*storedMessage, duplicates int, err error) {
+	now := time.Now().UTC()
+	err = b.commit(func(state *storeState) error {
+		seen := map[string]bool{}
+		if b.options.IgnoreDuplicates {
+			for _, m := range state.Messages {
+				seen[m.Detail.MessageID] = true
+			}
+		}
+		for _, item := range items {
+			id := item.Parsed.detail.MessageID
+			if b.options.IgnoreDuplicates && id != "" {
+				if seen[id] {
+					duplicates++
+					continue
+				}
+				seen[id] = true
+			}
+			folder, ok := state.Folders[item.Folder]
+			if !ok {
+				if !validFolder(item.Folder) {
+					return fmt.Errorf("invalid folder name %q", item.Folder)
+				}
+				folder = folderState{Name: item.Folder, NextUID: 1, Subscribed: true, Validity: newValidity()}
+			}
+			if folder.NextUID == 0 || folder.NextUID == ^uint32(0) {
+				return errors.New("mailbox UID space exhausted")
+			}
+			date := item.Date
+			if date.IsZero() {
+				date = now
+			}
+			m := &storedMessage{MailboxID: b.options.MailboxID, ID: uuid.NewString(), Folder: folder.Name, UID: folder.NextUID, Created: now, InternalDate: date, Raw: item.Raw, Flags: append([]string{}, item.Flags...), Detail: item.Parsed.detail, Headers: item.Parsed.headers}
+			folder.NextUID++
+			state.Folders[folder.Name] = folder
+			state.Sequence++
+			m.Sequence = state.Sequence
+			state.Messages[m.ID] = m
+			stored = append(stored, m)
+		}
+		// The new messages are already in state, so check it as it stands.
+		if err := b.checkQuota(*state, 0, 0); err != nil {
+			return err
+		}
+		b.pruneState(state, now)
+		return nil
+	}, true)
+	if err != nil {
+		return nil, 0, err
+	}
+	b.dump(stored...)
+	return stored, duplicates, nil
+}
+
+// pruneState runs on every append, so it sorts only when the count limit is
+// actually exceeded; sorting a large mailbox each time made seeding quadratic.
 func (b *Store) pruneState(state *storeState, now time.Time) {
-	list := orderedMessages(*state, "")
-	for index, m := range list {
-		if (b.options.MaxMessages > 0 && len(list)-index > b.options.MaxMessages) || (b.options.MaxAge > 0 && m.Created.Before(now.Add(-b.options.MaxAge))) {
+	if excess := len(state.Messages) - b.options.MaxMessages; b.options.MaxMessages > 0 && excess > 0 {
+		for _, m := range orderedMessages(*state, "")[:excess] {
 			delete(state.Messages, m.ID)
+		}
+	}
+	if b.options.MaxAge > 0 {
+		cutoff := now.Add(-b.options.MaxAge)
+		for id, m := range state.Messages {
+			if m.Created.Before(cutoff) {
+				delete(state.Messages, id)
+			}
 		}
 	}
 }

@@ -192,6 +192,7 @@ Release archives include the skill for that version.
 | Connect an application | [Integration](docs/how-to/integrate-with-application.md) |
 | Isolate parallel tests | [Accounts](docs/how-to/separate-mailboxes.md) |
 | Seed history or raw MIME | [Fixtures](docs/how-to/seed-test-scenarios.md) |
+| Load an exported mailbox | [Import](docs/how-to/import-mailbox-export.md) |
 | Run, persist, or browse mail | [Run and test](docs/how-to/run-and-test.md) |
 | Look up API and settings | [HTTP API](docs/reference/http-api.md), [OpenAPI](openapi.yaml), [configuration](docs/reference/configuration.md) |
 | Understand protocol behavior | [IMAP](docs/reference/imap-behavior.md), [capabilities](docs/reference/capabilities.md) |

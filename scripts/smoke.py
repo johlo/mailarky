@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Exercise the Compose service using independent standard-library clients."""
+import gzip
 import imaplib
 import json
 import os
@@ -97,7 +98,23 @@ try:
            [first["recipients"][0], second["recipients"][0]])
     assert api("GET", first["api_base"] + "/messages")["total"] == 3
     assert api("GET", second["api_base"] + "/messages")["total"] == 2
-    print("Authenticated SMTP, fan-out, HTTP inspection, verified TLS IMAP, read flags, faults and recovery passed")
+
+    export = (b"From 1@xxx Fri Oct 02 12:00:00 +0000 2020\n"
+              b"X-Gmail-Labels: Sent,Opened,Starred,Work/Projects\n"
+              b"From: me@example.test\nTo: alice@customer.test\n"
+              b"Message-ID: <imported@example.test>\n\n>From the archive\n")
+    request = urllib.request.Request(base + second["api_base"] + "/import?labels=gmail", gzip.compress(export),
+                                     method="POST", headers={"Content-Type": "application/mbox"})
+    with urllib.request.urlopen(request, timeout=10) as response:
+        report = json.loads(response.read())
+    assert report["imported"] == 2 and report["folders"] == {"Sent": 1, "Work/Projects": 1}, report
+    with imaplib.IMAP4_SSL(host, imap_port, ssl_context=context, timeout=10) as imap:
+        imap.login(second["username"], second["password"])
+        assert imap.select('"Work/Projects"')[0] == "OK"
+        status, data = imap.fetch("1", "(FLAGS BODY.PEEK[])")
+        assert status == "OK" and b"\\Flagged" in data[0][0] and b"\\Seen" in data[0][0], data
+        assert data[0][1].endswith(b"\r\n\r\nFrom the archive\r\n"), data
+    print("Authenticated SMTP, fan-out, HTTP inspection, verified TLS IMAP, read flags, faults, recovery and mailbox import passed")
 finally:
     for account in accounts:
         api("DELETE", "/api/v1/accounts/" + account["id"])
