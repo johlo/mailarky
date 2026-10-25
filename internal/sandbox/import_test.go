@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -339,5 +340,76 @@ func TestImportedMailIsVisibleOverIMAP(t *testing.T) {
 	fetch := imapReply(t, w, "FETCH 1 (FLAGS INTERNALDATE)", "OK")
 	if !strings.Contains(fetch, `\Flagged`) || !strings.Contains(fetch, `\Seen`) || !strings.Contains(fetch, " 2-Oct-2020 12:00:00 +0000") {
 		t.Fatal(fetch)
+	}
+}
+
+// The fixtures come from Python's mailbox module (scripts/generate_import_fixtures.py),
+// an mbox and Maildir writer independent of this importer.
+func TestImportPythonWrittenFixtures(t *testing.T) {
+	a := testStore(t, defaultConfig())
+	h := controlHandler(a)
+	mbox, err := os.ReadFile("../../testdata/import/python.mbox")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report := importCall(t, h, "?folder=Python", "application/mbox", mbox, 200); report.Imported != 4 || report.Skipped != 0 {
+		t.Fatalf("%+v", report)
+	}
+	var archive bytes.Buffer
+	w := tar.NewWriter(&archive)
+	if err := w.AddFS(os.DirFS("../../testdata/import/python-maildir")); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	report := importCall(t, h, "", "application/x-tar", archive.Bytes(), 200)
+	if want := map[string]int{"INBOX": 2, "Work/Projects": 2}; report.Imported != 4 || !reflect.DeepEqual(report.Folders, want) {
+		t.Fatalf("%+v", report)
+	}
+	got := map[string]*storedMessage{}
+	for _, m := range a.snapshot() {
+		got[m.Detail.MessageID] = m
+	}
+	for id, want := range map[string]struct {
+		folder, subject string
+		flags           []string
+	}{
+		"python-1@example.test":  {"Python", "Read", []string{`\Seen`}},
+		"python-2@example.test":  {"Python", "Quoted", []string{}},
+		"python-3@example.test":  {"Python", "Flagged reply", []string{`\Answered`, `\Flagged`, `\Seen`}},
+		"python-4@example.test":  {"Python", "Grüße", []string{`\Seen`}},
+		"python-10@example.test": {"INBOX", "Seen and flagged", []string{`\Flagged`, `\Seen`}},
+		"python-11@example.test": {"INBOX", "Unread", []string{}},
+		"python-12@example.test": {"Work/Projects", "Replied in a subfolder", []string{`\Answered`, `\Seen`}},
+		"python-13@example.test": {"Work/Projects", "Trashed", []string{`\Deleted`}},
+	} {
+		m := got[id]
+		if m == nil || m.Folder != want.folder || m.Detail.Subject != want.subject || !reflect.DeepEqual(append([]string{}, m.Flags...), want.flags) {
+			t.Fatalf("%s: got %+v, want %+v", id, m, want)
+		}
+		if bytes.Contains(bytes.ReplaceAll(m.Raw, []byte("\r\n"), nil), []byte("\n")) {
+			t.Fatalf("%s: IMAP needs CRLF line endings: %q", id, m.Raw)
+		}
+		if m.Detail.From.Name != "Alice Ångström" || strings.Contains(string(m.Raw), "\r\nStatus:") {
+			t.Fatalf("%s: %+v %q", id, m.Detail.From, m.Raw)
+		}
+	}
+	if m := got["python-1@example.test"]; !m.InternalDate.Equal(time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)) {
+		t.Fatal(m.InternalDate)
+	}
+	// Python writes mboxo, which quotes only "From " lines; the importer reads
+	// mboxrd, so a line that already began with ">From " loses one ">". The
+	// two variants cannot be told apart from the file.
+	if text := got["python-2@example.test"].Detail.Text; text != "From the start\r\nFrom already quoted\r\nend\r\n" {
+		t.Fatalf("%q", text)
+	}
+	attachments := got["python-4@example.test"].Detail.Attachments
+	if len(attachments) != 1 || attachments[0].FileName != "report.bin" {
+		t.Fatalf("%+v", attachments)
+	}
+	data, err := readMIMEPart(got["python-4@example.test"].Raw, attachments[0].PartID)
+	if err != nil || len(data) != 256 || data[0] != 0 || data[255] != 255 {
+		t.Fatalf("attachment bytes changed: %d %v", len(data), err)
 	}
 }

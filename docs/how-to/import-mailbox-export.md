@@ -38,6 +38,12 @@ skipped. Those headers, and Gmail's, are removed, because a real server never
 sends them. Each message's INTERNALDATE comes from its mbox `From ` line, or
 from its `Date` header if that line has no date.
 
+mbox files quote body lines that start with `From ` as `>From `, and Mailarky
+removes one `>` from each such line. Some mail programs also quote lines that
+already started with `>From ` (the mboxrd variant), and others don't (mboxo).
+The file doesn't say which variant it is, so in an mboxo file, a body line that
+really started with `>From ` loses its `>`.
+
 ### Gmail labels
 
 Takeout puts all mail in one file and lists each message's labels in an
