@@ -68,6 +68,7 @@ func (a *httpAPI) handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/accounts/{account}/messages/{id}/view", a.withAccount((*accountAPI).view))
 	mux.HandleFunc("GET /api/v1/accounts/{account}/folders", a.withAccount((*accountAPI).folders))
 	mux.HandleFunc("POST /api/v1/accounts/{account}/folders", a.withAccount((*accountAPI).createFolder))
+	mux.HandleFunc("POST /api/v1/accounts/{account}/import", a.withAccount((*accountAPI).importMessages))
 	mux.HandleFunc("GET /api/v1/accounts/{account}/events", a.withAccount((*accountAPI).events))
 	mux.HandleFunc("GET /metrics", a.metrics)
 	for _, prefix := range []string{"/api/v1/faults", "/api/v1/accounts/{account}/faults"} {

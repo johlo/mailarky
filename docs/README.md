@@ -9,6 +9,7 @@
 - [Connect an application](how-to/integrate-with-application.md)
 - [Isolate parallel tests](how-to/separate-mailboxes.md)
 - [Seed history and custom MIME](how-to/seed-test-scenarios.md)
+- [Import a mailbox export](how-to/import-mailbox-export.md)
 - [Inject SMTP and IMAP failures](how-to/fault-injection.md)
 - [Run, browse, and test](how-to/run-and-test.md)
 - [Troubleshoot](how-to/troubleshoot.md)

@@ -42,6 +42,12 @@ Create an additional folder first using
 `POST {api_base}/folders` with `{"name":"History"}`. IMAP APPEND is also available
 when the test should seed mail through an independent protocol client.
 
+## Real mailbox history
+
+To load many messages at once, or an export of a real mailbox, use the
+[mailbox import](import-mailbox-export.md). It takes an mbox file or a Maildir
+in one request.
+
 ## Reset a scenario
 
 Delete matching fixtures with

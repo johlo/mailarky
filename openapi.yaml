@@ -318,12 +318,14 @@ components:
             properties:
                 data:
                     additionalProperties: true
+                    description: For import events, messages counts new messages remaining after retention; deleted optionally counts existing messages removed by retention. Refresh the mailbox on an import event.
                     type: object
                 type:
                     enum:
                         - new
                         - update
                         - delete
+                        - import
                     type: string
             required:
                 - type
@@ -479,6 +481,42 @@ components:
                     type: string
             required:
                 - type
+            type: object
+        ImportReport:
+            additionalProperties: false
+            properties:
+                duplicates:
+                    description: Messages left out because of duplicate Message-ID suppression.
+                    type: integer
+                folders:
+                    additionalProperties:
+                        type: integer
+                    description: Imported messages per folder.
+                    type: object
+                imported:
+                    type: integer
+                problems:
+                    description: The first 20 skipped messages and why.
+                    items:
+                        additionalProperties: false
+                        properties:
+                            error:
+                                type: string
+                            source:
+                                type: string
+                        required:
+                            - source
+                            - error
+                        type: object
+                    type: array
+                skipped:
+                    type: integer
+            required:
+                - imported
+                - duplicates
+                - skipped
+                - folders
+                - problems
             type: object
         IMAPReject:
             additionalProperties: false
@@ -1507,6 +1545,86 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: Storage or service failure
             summary: Create a folder
+    /api/v1/accounts/{account}/import:
+        post:
+            description: Imports an mbox file, or a tar of a Maildir, in one all-or-nothing commit. Either body may be gzip-compressed. Missing folders are created. Malformed messages are skipped and reported.
+            operationId: post_api_v1_accounts_account_import
+            parameters:
+                - in: path
+                  name: account
+                  required: true
+                  schema:
+                    type: string
+                - description: Target folder for an mbox import.
+                  in: query
+                  name: folder
+                  required: false
+                  schema:
+                    default: INBOX
+                    type: string
+                - description: Map Google Takeout X-Gmail-Labels to folders and flags (mbox only).
+                  in: query
+                  name: labels
+                  required: false
+                  schema:
+                    enum:
+                        - gmail
+                    type: string
+            requestBody:
+                content:
+                    application/mbox:
+                        schema:
+                            format: binary
+                            type: string
+                    application/x-tar:
+                        schema:
+                            format: binary
+                            type: string
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ImportReport'
+                    description: Successful operation
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: Invalid input
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: HTTP authentication required
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: Resource not found
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: Unsupported Content-Type
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: Storage or service failure
+                "507":
+                    description: Account storage quota exceeded
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            summary: Import a mailbox export
     /api/v1/accounts/{account}/messages:
         delete:
             operationId: delete_api_v1_accounts_account_messages

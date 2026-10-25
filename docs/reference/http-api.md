@@ -49,6 +49,7 @@ Paths below are relative to `/api/v1/accounts/{account}`.
 | GET | `/messages/{id}/view` | Sandboxed HTML; `?format=text` selects text |
 | GET | `/folders` | Name, message count, UIDNEXT, UIDVALIDITY |
 | POST | `/folders` | Create with `{"name":"History"}`; 201 |
+| POST | `/import` | Import an mbox file or Maildir tar; 200 summary |
 | GET | `/events` | WebSocket stream of `{"type":...,"data":...}` |
 | PUT | `/oauth-tokens` | Replace configured test tokens; `{"tokens":[...]}`; 204 |
 
@@ -110,6 +111,18 @@ message detail with `id`, `message_id`, `folder`, and `uid`.
 Exceeding the account's storage quota returns HTTP 507 without storing or
 evicting any message.
 
+### Mailbox import
+
+`POST /import` takes `Content-Type: application/mbox` or `application/x-tar`
+(a Maildir root), either optionally gzip-compressed. For mbox, `?folder=`
+selects the folder (default `INBOX`) and `?labels=gmail` maps Google Takeout
+labels to folders and flags instead. Missing folders are created. All messages
+are stored in one commit, or none are. Unparseable or oversized messages are
+skipped; the response reports `imported`, `duplicates`, `skipped`, per-folder
+counts in `folders`, and the first 20 `problems`. An unreadable body returns 400
+and exceeding the quota returns 507, without storing anything. See
+[import a mailbox export](../how-to/import-mailbox-export.md).
+
 ### Search and deletion
 
 `GET /messages?query=...&start=0&limit=50&tz=UTC` returns `messages`, `start`,
@@ -153,6 +166,10 @@ See the [fault guide](../how-to/fault-injection.md) and [OpenAPI](../../openapi.
 ## Notifications and metrics
 
 WebSocket events are account-local `new`, `update`, or `delete` notifications.
+An import sends a single `import` event whose `data.messages` counts new messages
+remaining after retention. When retention removes existing messages, the event
+also includes `data.deleted` instead of sending individual deletion events.
+Refresh the mailbox on an import event, including one with `messages: 0`.
 Slow subscribers are disconnected when their bounded queue fills. Webhooks
 receive a message summary after append, with `Mailarky-Mailbox` and optional
 `Mailarky-Label` headers. Delivery is asynchronous and retries up to three times.
