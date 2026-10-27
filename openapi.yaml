@@ -855,7 +855,7 @@ components:
             additionalProperties: false
             properties:
                 command:
-                    description: Uppercase SMTP/IMAP command, including CONNECT and distinct UID commands.
+                    description: Uppercase SMTP/IMAP command, including CONNECT, GETMETADATA, SETMETADATA, and distinct UID commands such as UID EXPUNGE.
                     type: string
                 phase:
                     enum:
