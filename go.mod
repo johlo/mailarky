@@ -11,7 +11,7 @@ require (
 	github.com/johlo/go-smtp v0.25.1-0.20261004142717-6530c2c7bb39
 	go.etcd.io/bbolt v1.5.0
 	golang.org/x/crypto v0.58.0
-	golang.org/x/net v0.61.0
+	golang.org/x/net v0.62.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
