@@ -170,26 +170,6 @@ curl -fsSL https://github.com/johlo/mailarky/archive/refs/heads/main.tar.gz |
 
 Release archives include the skill for that version.
 
-## Focus and boundaries
-
-- Raw MIME is the source of truth. HTTP inspection has no read-state side effects;
-  IMAP BODY fetches set `\Seen`, while BODY.PEEK and EXAMINE do not.
-- Selected IMAP sessions track their own sequence numbers. External changes
-  produce EXISTS, EXPUNGE, and flag updates at safe command boundaries and during IDLE.
-- Storage is in memory by default. Optional bbolt persistence preserves accounts,
-  credentials, messages, IMAP metadata, and UID identity. Fault rules are ephemeral.
-- IMAP supports METADATA for client settings and UIDPLUS for tracking appended
-  and copied messages and selectively expunging deleted mail.
-- Retention is unlimited by default. Optional retention prunes old mail; storage
-  quotas reject new mail without evicting fixtures. Both span an account's folders.
-- Mail is captured locally. There is no relay, forwarding, POP3, or built-in webmail UI.
-  Roundcube provides browsing over the real mail protocols.
-- SMTP has one final result per transaction. A content fault rejects a fan-out
-  transaction before storing copies; an after fault runs after storage. Commits
-  across separate account databases are not atomic if a persistence write fails.
-- This is a single-process test service. The HTTP control API administers all accounts;
-  it is not a tenancy boundary for mutually untrusted users.
-
 ## Documentation
 
 | Task | Guide |
