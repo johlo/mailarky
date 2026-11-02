@@ -51,6 +51,7 @@ func (a *httpAPI) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { jsonResponse(w, 200, map[string]string{"status": "ok"}) })
 	mux.HandleFunc("GET /api/v1/info", a.info)
+	mux.HandleFunc("GET /api/v1/certificate", a.certificate)
 	mux.HandleFunc("GET /api/v1/accounts", a.listAccounts)
 	mux.HandleFunc("POST /api/v1/accounts", a.createAccount)
 	mux.HandleFunc("GET /api/v1/accounts/{account}", a.withAccount((*accountAPI).description))

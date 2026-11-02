@@ -4,7 +4,6 @@ import gzip
 import imaplib
 import json
 import os
-from pathlib import Path
 import smtplib
 import ssl
 import urllib.request
@@ -14,7 +13,9 @@ base = os.environ.get("MAILARKY_HTTP_URL", "http://localhost:8026").rstrip("/")
 host = os.environ.get("MAILARKY_SMOKE_HOST", "localhost")
 smtp_port = int(os.environ.get("MAILARKY_SMTP_PORT", "1025"))
 imap_port = int(os.environ.get("MAILARKY_IMAP_PORT", "1993"))
-context = ssl.create_default_context(cafile=str(Path(__file__).resolve().parents[1] / "testdata/tls/server.crt"))
+# Trust only what the server publishes, as the quick start does.
+with urllib.request.urlopen(base + "/api/v1/certificate", timeout=10) as response:
+    context = ssl.create_default_context(cadata=response.read().decode())
 
 
 def api(method, path, body=None):

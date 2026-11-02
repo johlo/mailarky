@@ -21,9 +21,9 @@ if a request is rejected unexpectedly.
 docker run -d --name mailarky \
   -e MAILARKY_SMTP_TLS_MODE=starttls \
   -p 127.0.0.1:1025:1025 -p 127.0.0.1:1993:1993 -p 127.0.0.1:8026:8026 \
-  ghcr.io/johlo/mailarky:v0.2.0
-docker cp mailarky:/certs/server.crt ./mailarky.crt
-curl -fsS http://localhost:8026/healthz
+  ghcr.io/johlo/mailarky:v0.5.0
+curl -fsS --retry 10 --retry-all-errors --retry-delay 1 \
+  -o mailarky.crt http://localhost:8026/api/v1/certificate
 ```
 
 | Interface | Address | Security |

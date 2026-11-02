@@ -42,7 +42,6 @@ docker run -d --name mailarky \
   -p "127.0.0.1:${MAILARKY_IMAP_PORT:-1993}:1993" \
   -p "127.0.0.1:${MAILARKY_HTTP_PORT:-8026}:8026" \
   ghcr.io/johlo/mailarky:latest
-docker cp mailarky:/certs/server.crt ./mailarky.crt
 ```
 
 To build from source instead, see [run from source](docs/how-to/run-and-test.md#start-locally).
@@ -53,10 +52,15 @@ To build from source instead, see [run from source](docs/how-to/run-and-test.md#
 | IMAP | `localhost:1993`, implicit TLS |
 | HTTP control API | `http://localhost:8026/api/v1` |
 
-Trust the copied `mailarky.crt` in your test clients. The default credentials
-are `user@example.test` / `local-imap-only`, or use a test account's generated
-credentials. For optional Roundcube webmail on port 8027, follow
-[view mail in a browser](docs/how-to/run-and-test.md#view-mail-in-a-browser).
+Download the test certificate and trust it in your test clients:
+
+```sh
+curl -fsS -o mailarky.crt "http://localhost:${MAILARKY_HTTP_PORT:-8026}/api/v1/certificate"
+```
+
+The default credentials are `user@example.test` / `local-imap-only`, or use a
+test account's generated credentials. For optional Roundcube webmail on port
+8027, follow [view mail in a browser](docs/how-to/run-and-test.md#view-mail-in-a-browser).
 
 All published ports bind to loopback. Set `MAILARKY_SMTP_PORT`,
 `MAILARKY_IMAP_PORT`, and `MAILARKY_HTTP_PORT` to change them in the command
