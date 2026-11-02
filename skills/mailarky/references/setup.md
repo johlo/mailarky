@@ -7,7 +7,7 @@ Add a service next to the application:
 ```yaml
 services:
   mailarky:
-    image: ghcr.io/johlo/mailarky:v0.2.0
+    image: ghcr.io/johlo/mailarky:v0.5.0
     environment:
       MAILARKY_SMTP_TLS_MODE: starttls
     ports:
@@ -20,8 +20,8 @@ The image has a health check, so `docker compose up -d --wait` returns once
 Mailarky is ready, and other services can use
 `depends_on: {mailarky: {condition: service_healthy}}`. Inside the Compose
 network, the application connects to host `mailarky` on ports 1025, 1993 and
-8026. Copy the certificate with `docker compose cp mailarky:/certs/server.crt
-./mailarky.crt`, or download it as described below.
+8026. Download the certificate with `curl -fsS -o mailarky.crt
+http://localhost:8026/api/v1/certificate`.
 
 ## GitHub Actions
 
@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       mailarky:
-        image: ghcr.io/johlo/mailarky:v0.2.0
+        image: ghcr.io/johlo/mailarky:v0.5.0
         env:
           MAILARKY_SMTP_TLS_MODE: starttls
         ports:
@@ -41,16 +41,18 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Fetch the Mailarky test certificate
-        run: curl -fsSL -o mailarky.crt https://github.com/johlo/mailarky/releases/download/v0.2.0/server.crt
+        run: curl -fsS -o mailarky.crt http://localhost:8026/api/v1/certificate
       # ... run the tests against localhost:1025, localhost:1993 and http://localhost:8026
 ```
 
-Every release publishes the same test certificate as `server.crt`.
+`GET /api/v1/certificate` returns the certificates the server actually uses,
+including your own if you configured them. Every release also publishes the
+default test certificate as `server.crt`.
 
 ## Without Docker
 
 Download a binary archive from <https://github.com/johlo/mailarky/releases> or
-run `go install github.com/johlo/mailarky/cmd/mailarky@v0.2.0`. Archives
+run `go install github.com/johlo/mailarky/cmd/mailarky@v0.5.0`. Archives
 contain the test certificate in `testdata/tls`. IMAP needs a certificate and
 key:
 

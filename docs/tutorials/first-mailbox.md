@@ -3,8 +3,8 @@
 This tutorial sends a message through SMTP, inspects it through HTTP, and reads
 it through IMAP. You need Docker and Python 3.
 
-Start Mailarky with the [quick start](../../README.md#quick-start), which copies
-the test certificate to `mailarky.crt`. From a source checkout, you can instead
+Start Mailarky with the [quick start](../../README.md#quick-start), which
+downloads the test certificate to `mailarky.crt`. From a source checkout, you can instead
 run `docker compose up -d --build --wait` and use `testdata/tls/server.crt`.
 
 Save the following as a temporary Python script in the directory containing

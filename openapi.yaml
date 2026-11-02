@@ -2455,6 +2455,30 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: Storage or service failure
             summary: Read service information
+    /api/v1/certificate:
+        get:
+            description: Returns the certificates that the IMAP, SMTP and HTTPS listeners present, as one PEM bundle without private keys. Use it as the CA file in test clients.
+            operationId: get_api_v1_certificate
+            responses:
+                "200":
+                    content:
+                        application/x-pem-file:
+                            schema:
+                                type: string
+                    description: PEM certificate bundle
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: HTTP authentication required
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: A configured certificate can't be loaded
+            summary: Download the TLS certificates
     /healthz:
         get:
             operationId: get_healthz

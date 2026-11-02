@@ -18,6 +18,11 @@ all accounts, not for account-level access control.
 | GET | `/api/v1/accounts/{account}` | Account description |
 | DELETE | `/api/v1/accounts/{account}` | Delete account and storage; 204 |
 | GET | `/api/v1/info` | Service name, protocols, account count |
+| GET | `/api/v1/certificate` | TLS certificates as a PEM bundle for clients to trust |
+
+`/api/v1/certificate` returns the certificates that the IMAP, SMTP, and HTTPS
+listeners present, without private keys. Use the file as the CA file in test
+clients.
 
 Create with optional `name`, `username`, `password`, `recipients`, `limits`, and
 `oauth_tokens` fields.
