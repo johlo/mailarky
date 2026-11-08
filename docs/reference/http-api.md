@@ -31,9 +31,12 @@ and explicitly registered recipients must be unique. Recipients are exact,
 case-insensitive envelope addresses used only for anonymous SMTP routing.
 Passwords have a 72-byte limit. `default` cannot be deleted.
 
-`limits` accepts `smtp_connections`, `imap_connections`, `send_messages`,
-`send_window`, `quota_messages`, and `quota_bytes`. Descriptions include the
-effective `limits`. See [enforced limits](configuration.md#enforced-limits)
+`limits` accepts `smtp_connections`, `imap_connections`, `smtp_commands`,
+`smtp_command_window`, `imap_commands`, `imap_command_window`, `send_messages`,
+`send_window`, `quota_messages`, and `quota_bytes`. Command limits apply to
+authenticated SMTP/IMAP traffic; HTTP endpoints remain unrestricted by them.
+Descriptions include the effective `limits`.
+See [enforced limits](configuration.md#enforced-limits)
 for defaults and rejection behavior. Limits are fixed when the account is created.
 
 ## Account resources

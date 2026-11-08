@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/johlo/go-smtp"
 )
@@ -137,6 +138,12 @@ func (b *smtpBackend) installFaultHooks(srv *smtp.Server) {
 		return b.hookFaults(c, "CONNECT", "before", smtpCommandContext{})
 	}
 	srv.CommandHook = func(c *smtp.Conn, command, arg string) error {
+		// Keep transaction cleanup and logout available even when overloaded.
+		if session, ok := c.Session().(*smtpSession); ok && session.authenticated != nil && command != "QUIT" && command != "RSET" {
+			if !session.authenticated.allowCommand("smtp", time.Now()) {
+				return &smtp.SMTPError{Code: 451, EnhancedCode: smtp.EnhancedCode{4, 7, 0}, Message: "Account SMTP command rate limit exceeded; retry later"}
+			}
+		}
 		ctx := smtpContext(c)
 		c.HookData = ctx
 		if command == "CONNECT" || command == "MAIL" || command == "RCPT" {
