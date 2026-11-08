@@ -1,0 +1,31 @@
+[server]
+addr = ":1323"
+background_connection = false
+
+# The Compose service is for local tests; Mailarky controls protocol limits.
+[server.rate_limit]
+enabled = false
+
+[provider]
+type = "multi"
+
+# Generated account usernames have no domain. Keep the login unchanged while
+# giving the composer a valid From address; email-shaped usernames stay intact.
+[provider.multi]
+default_domain = "example.test"
+
+[provider.multi.default]
+type = "imap"
+server = "imaps://mailarky:1993"
+
+[smtp]
+server = "smtp://mailarky:1025"
+
+# Enable only mail features; Mailarky does not serve DAV or ManageSieve.
+[plugin.base]
+enabled = true
+
+# Supported by our small, pinned integration patch. Mailarky already stores
+# authenticated SMTP submissions in Sent, so Alps must not append another copy.
+[plugin.base.options]
+smtp_saves_sent = true

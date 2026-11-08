@@ -3,7 +3,8 @@
 ## Start locally
 
 For a published image, use the [quick start](../../README.md#quick-start).
-To build from source:
+The source setup needs Docker Engine 25 or newer and Compose 2.20.2 or newer
+for frequent health checks during startup. To build from source:
 
 ```sh
 git clone https://github.com/johlo/mailarky.git
@@ -25,6 +26,28 @@ MAILARKY_SMTP_PORT=11025 MAILARKY_IMAP_PORT=11993 \
 Compose host-port settings do not change container listener ports. When
 running the binary directly, the same port variables change listener ports.
 Full bind-address variables override them; see [configuration](../reference/configuration.md).
+
+## Faster repeated starts
+
+Once the images have been built, skip the build step when starting them again:
+
+```sh
+docker compose --profile webmail up -d --no-build --wait
+```
+
+Omit `--profile webmail` if you only need Mailarky. Add `--build` in place of
+`--no-build` after changing or updating the source checkout. `--no-build`
+requires existing images and does not incorporate source changes.
+
+Both Docker builds share persistent BuildKit caches for Go module downloads
+and compiled packages. Rebuilding after a source or dependency change reuses
+unchanged packages. The first build still downloads dependencies and compiles
+both services; pruning the builder cache discards those savings.
+
+Health checks poll every 250 ms during startup, then return to their normal
+intervals once healthy or the startup grace period ends. Alps still waits for
+Mailarky to be healthy, and `--wait` returns only when all enabled services are
+ready.
 
 ## Run without Docker
 
@@ -95,20 +118,44 @@ for separate SMTP certificates and other options.
 
 ## View mail in a browser
 
-From a source checkout, start the optional Roundcube profile:
+From a source checkout, start the optional [Alps](https://github.com/migadu/alps)
+profile. The first build downloads and compiles the pinned Alps source for your
+machine's architecture; later starts reuse the image:
 
 ```sh
 docker compose --profile webmail up -d --build --wait
 ```
 
+For later starts, use [the command without a build](#faster-repeated-starts).
+
 Open <http://localhost:8027>. Use `user@example.test` / `local-imap-only` or the
-credentials from account creation. Roundcube uses TLS IMAP and SMTP STARTTLS,
+credentials from account creation. Alps uses TLS IMAP and SMTP STARTTLS,
 trusts the bundled certificate, and authenticates both protocols with the
 logged-in account. Outgoing mail appears in that account's `Sent` folder.
 `MAILARKY_WEBMAIL_PORT` changes the browser port.
 
-Roundcube is optional and talks to the real mail protocols. Mailarky has no
+Generated usernames work unchanged at login. For composing, Alps adds
+`@example.test` to usernames without a domain. Email-shaped usernames keep
+their original address. The Compose configuration enables mail features only.
+Accounts include `Drafts`, `Trash`, and `Junk` folders for composing and filing.
+
+Alps settings and identities are stored through IMAP METADATA in the account,
+so they follow Mailarky's persistence settings. Webmail activity also spends
+that account's protocol limits and appears in command history. Use the HTTP
+inspection API during tests that assert exact command counts; opening the same
+account in webmail changes those counts.
+
+Alps is optional and talks to the real mail protocols. Mailarky has no
 built-in mailbox browser. Its HTTP inspection endpoints are intended for tests.
+
+Check the integration against the running profile with:
+
+```sh
+python3 scripts/webmail_smoke.py
+```
+
+Set `MAILARKY_HTTP_URL` and `MAILARKY_WEBMAIL_URL` when using different host ports.
+The smoke test creates and removes its own accounts and webmail sessions.
 
 ## Persist state
 
@@ -155,6 +202,16 @@ Go tests exercise the API and real SMTP/IMAP sockets, including concurrent
 account isolation, fault recovery, read flags, sequence numbers, IDLE,
 persistence, retention, and notifications. Python's standard-library clients
 provide an independent Docker smoke test. Python is not a runtime dependency.
+
+The Alps image is built by [`docker/alps/Dockerfile`](../../docker/alps/Dockerfile)
+from a fixed upstream commit, with its frontend embedded in the Go binary.
+It applies [`smtp-saves-sent.patch`](../../docker/alps/smtp-saves-sent.patch)
+to support the `smtp_saves_sent` option in our
+[`config.toml`](../../docker/alps/config.toml): Mailarky already captures SMTP
+submissions, so Alps skips its extra IMAP copy while retaining draft cleanup.
+This does not enable global Message-ID deduplication. When updating the Alps
+commit, review the patch and run the webmail smoke test plus browser checks for
+login, reading, composing, attachments, folders, and settings.
 
 The public protocol forks have their own module paths and CI. To update one,
 run `go get github.com/johlo/go-imap/v2@COMMIT` or

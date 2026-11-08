@@ -1,0 +1,22 @@
+--- a/plugins/base/routes.go
++++ b/plugins/base/routes.go
+@@ -3432,7 +3432,18 @@
+ 		defer func() {
+ 			forgetAppendOutcome(ctx.Session.Cache(), sentName, tried, draftPath)
+ 		}()
+-		if sentName == "" {
++		// Mailarky captures SMTP submissions itself. Keep draft cleanup and
++		// cache invalidation, but do not append a second copy to Sent.
++		smtpSavesSent, _ := ctx.Server.Options.Plugins["base"].Options["smtp_saves_sent"].(bool)
++		if smtpSavesSent {
++			sent, err := p.FindMailboxByType(provider.MailboxTypeSent)
++			if err != nil {
++				return err
++			}
++			if sent != nil {
++				sentName = sent.Name
++			}
++		} else if sentName == "" {
+ 			held, err := storeOnce(p, &tried, provider.MailboxTypeSent, msg.MessageID, nil, func() error {
+ 				sent, _, _, err := appendMessageWithProvider(p, msg, provider.MailboxTypeSent)
+ 				if err == nil {

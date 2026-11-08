@@ -1,62 +1,59 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1262" height="422" viewBox="0 0 1262 422" font-family="'DejaVu Sans Mono', 'Menlo', 'Consolas', 'Liberation Mono', 'Courier New', monospace" font-size="14px">
+<svg xmlns="http://www.w3.org/2000/svg" width="1384" height="408" viewBox="0 0 1384 408" font-family="'DejaVu Sans Mono', 'Menlo', 'Consolas', 'Liberation Mono', 'Courier New', monospace" font-size="14px">
   <defs>
-    <marker id="arrow-5c5c7c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5c5c7c"/>
-    </marker>
-    <marker id="arrow-5c5c7c-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker id="r6206dd58-arrow-5c5c7c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#5c5c7c"/>
     </marker>
   </defs>
-  <rect x="0" y="0" width="1262" height="422" fill="#111111"/>
-  <path d="M481.4 254 H737.4 a8 8 0 0 1 8 8 V369 a8 8 0 0 1 -8 8 H481.4 a8 8 0 0 1 -8 -8 V262 a8 8 0 0 1 8 -8 Z" fill="#142814" stroke="#486544"/>
-  <text x="609.4" y="282.4" fill="#d9d9d9" text-anchor="middle">Mailarky</text>
-  <text x="609.4" y="301.4" fill="#8b8b8b" text-anchor="middle">[Software system]</text>
-  <text x="609.4" y="320.4" fill="#d9d9d9" text-anchor="middle">Captures SMTP mail, serves it</text>
-  <text x="609.4" y="339.4" fill="#d9d9d9" text-anchor="middle">over TLS IMAP and exposes it</text>
-  <text x="609.4" y="358.4" fill="#d9d9d9" text-anchor="middle">through an HTTP API</text>
-  <path d="M48 263.5 H270 a8 8 0 0 1 8 8 V359.5 a8 8 0 0 1 -8 8 H48 a8 8 0 0 1 -8 -8 V271.5 a8 8 0 0 1 8 -8 Z" fill="#191728" stroke="#4f5367"/>
-  <text x="159" y="291.9" fill="#d9d9d9" text-anchor="middle">Application under test</text>
-  <text x="159" y="310.9" fill="#8b8b8b" text-anchor="middle">[External system]</text>
-  <text x="159" y="329.9" fill="#d9d9d9" text-anchor="middle">Sends and reads mail with</text>
-  <text x="159" y="348.9" fill="#d9d9d9" text-anchor="middle">a test account</text>
-  <path d="M277.2 40 H508.2 a8 8 0 0 1 8 8 V136 a8 8 0 0 1 -8 8 H277.2 a8 8 0 0 1 -8 -8 V48 a8 8 0 0 1 8 -8 Z" fill="#460000" stroke="#8f3a3a"/>
-  <text x="392.7" y="68.4" fill="#d9d9d9" text-anchor="middle">Test suite</text>
-  <text x="392.7" y="87.4" fill="#8b8b8b" text-anchor="middle">[Person or CI job]</text>
-  <text x="392.7" y="106.4" fill="#d9d9d9" text-anchor="middle">Drives the application and</text>
-  <text x="392.7" y="125.4" fill="#d9d9d9" text-anchor="middle">asserts on its mail</text>
-  <path d="M963.8 249.5 H1213.8 a8 8 0 0 1 8 8 V373.5 a8 8 0 0 1 -8 8 H963.8 a8 8 0 0 1 -8 -8 V257.5 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
+  <rect x="0" y="0" width="1384" height="408" fill="#111111"/>
+  <path d="M550 240 H806 a8 8 0 0 1 8 8 V355 a8 8 0 0 1 -8 8 H550 a8 8 0 0 1 -8 -8 V248 a8 8 0 0 1 8 -8 Z" fill="#142814" stroke="#486544"/>
+  <text x="678" y="268.4" fill="#d9d9d9" text-anchor="middle">Mailarky</text>
+  <text x="678" y="287.4" fill="#8b8b8b" text-anchor="middle">[Software system]</text>
+  <text x="678" y="306.4" fill="#d9d9d9" text-anchor="middle">Captures SMTP mail, serves it</text>
+  <text x="678" y="325.4" fill="#d9d9d9" text-anchor="middle">over TLS IMAP and exposes it</text>
+  <text x="678" y="344.4" fill="#d9d9d9" text-anchor="middle">through an HTTP API</text>
+  <path d="M48 249.5 H270 a8 8 0 0 1 8 8 V345.5 a8 8 0 0 1 -8 8 H48 a8 8 0 0 1 -8 -8 V257.5 a8 8 0 0 1 8 -8 Z" fill="#191728" stroke="#4f5367"/>
+  <text x="159" y="277.9" fill="#d9d9d9" text-anchor="middle">Application under test</text>
+  <text x="159" y="296.9" fill="#8b8b8b" text-anchor="middle">[External system]</text>
+  <text x="159" y="315.9" fill="#d9d9d9" text-anchor="middle">Sends and reads mail with</text>
+  <text x="159" y="334.9" fill="#d9d9d9" text-anchor="middle">a test account</text>
+  <path d="M311.5 40 H542.5 a8 8 0 0 1 8 8 V136 a8 8 0 0 1 -8 8 H311.5 a8 8 0 0 1 -8 -8 V48 a8 8 0 0 1 8 -8 Z" fill="#311b1b" stroke="#8f3a3a"/>
+  <text x="427" y="68.4" fill="#d9d9d9" text-anchor="middle">Test suite</text>
+  <text x="427" y="87.4" fill="#8b8b8b" text-anchor="middle">[Person or CI job]</text>
+  <text x="427" y="106.4" fill="#d9d9d9" text-anchor="middle">Drives the application and</text>
+  <text x="427" y="125.4" fill="#d9d9d9" text-anchor="middle">asserts on its mail</text>
+  <path d="M1086 235.5 H1336 a8 8 0 0 1 8 8 V359.5 a8 8 0 0 1 -8 8 H1086 a8 8 0 0 1 -8 -8 V243.5 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
 
-  <path d="M977.8 263.5 H1199.8 a8 8 0 0 1 8 8 V359.5 a8 8 0 0 1 -8 8 H977.8 a8 8 0 0 1 -8 -8 V271.5 a8 8 0 0 1 8 -8 Z" fill="#191728" stroke="#4f5367"/>
-  <text x="1088.8" y="291.9" fill="#d9d9d9" text-anchor="middle">Webhook receiver</text>
-  <text x="1088.8" y="310.9" fill="#8b8b8b" text-anchor="middle">[External system]</text>
-  <text x="1088.8" y="329.9" fill="#d9d9d9" text-anchor="middle">Optional. Notified of new</text>
-  <text x="1088.8" y="348.9" fill="#d9d9d9" text-anchor="middle">messages</text>
-  <path d="M 384.7 144 C 384.7 246.15, 159 161.35, 159 263.5" fill="none" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#arrow-5c5c7c)"/>
-  <rect x="208.85" y="195.75" width="126" height="16" fill="#111111"/>
+  <path d="M1100 249.5 H1322 a8 8 0 0 1 8 8 V345.5 a8 8 0 0 1 -8 8 H1100 a8 8 0 0 1 -8 -8 V257.5 a8 8 0 0 1 8 -8 Z" fill="#191728" stroke="#4f5367"/>
+  <text x="1211" y="277.9" fill="#d9d9d9" text-anchor="middle">Webhook receiver</text>
+  <text x="1211" y="296.9" fill="#8b8b8b" text-anchor="middle">[External system]</text>
+  <text x="1211" y="315.9" fill="#d9d9d9" text-anchor="middle">Optional. Notified of new</text>
+  <text x="1211" y="334.9" fill="#d9d9d9" text-anchor="middle">messages</text>
+  <line x1="385.83" y1="144" x2="159" y2="249.5" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#r6206dd58-arrow-5c5c7c)"/>
+  <rect x="209.42" y="188.75" width="126" height="16" fill="#111111"/>
   <g font-size="12px">
-  <text x="271.85" y="207.95" fill="#8b8b8b" text-anchor="middle">Triggers actions</text>
+  <text x="272.42" y="200.95" fill="#8b8b8b" text-anchor="middle">Triggers actions</text>
   </g>
-  <path d="M 400.7 144 C 400.7 238.37, 609.4 159.63, 609.4 254" fill="none" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#arrow-5c5c7c)"/>
-  <rect x="359.55" y="183" width="291" height="32" fill="#111111"/>
+  <line x1="468.17" y1="144" x2="678" y2="240" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#r6206dd58-arrow-5c5c7c)"/>
+  <rect x="427.58" y="176" width="291" height="32" fill="#111111"/>
   <g font-size="12px">
-  <text x="505.05" y="195.2" fill="#8b8b8b" text-anchor="middle">Seeds mail, inspects it, injects faults</text>
-  <text x="505.05" y="211.2" fill="#8b8b8b" text-anchor="middle">[HTTP]</text>
+  <text x="573.08" y="188.2" fill="#8b8b8b" text-anchor="middle">Seeds mail, inspects it, injects faults</text>
+  <text x="573.08" y="204.2" fill="#8b8b8b" text-anchor="middle">[HTTP]</text>
   </g>
-  <path d="M 278 299.5 C 356.16 299.5, 395.24 299.5, 473.4 299.5" fill="none" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#arrow-5c5c7c)"/>
-  <rect x="334.7" y="283.5" width="82" height="32" fill="#111111"/>
+  <line x1="278" y1="318.83" x2="542" y2="322" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#r6206dd58-arrow-5c5c7c)"/>
+  <rect x="369" y="304.42" width="82" height="32" fill="#111111"/>
   <g font-size="12px">
-  <text x="375.7" y="295.7" fill="#8b8b8b" text-anchor="middle">Sends mail</text>
-  <text x="375.7" y="311.7" fill="#8b8b8b" text-anchor="middle">[SMTP]</text>
+  <text x="410" y="316.62" fill="#8b8b8b" text-anchor="middle">Sends mail</text>
+  <text x="410" y="332.62" fill="#8b8b8b" text-anchor="middle">[SMTP]</text>
   </g>
-  <path d="M 473.4 331.5 C 395.24 331.5, 356.16 331.5, 278 331.5" fill="none" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#arrow-5c5c7c)"/>
-  <rect x="309.2" y="315.5" width="133" height="32" fill="#111111"/>
+  <line x1="542" y1="281" x2="278" y2="284.17" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#r6206dd58-arrow-5c5c7c)"/>
+  <rect x="343.5" y="266.58" width="133" height="32" fill="#111111"/>
   <g font-size="12px">
-  <text x="375.7" y="327.7" fill="#8b8b8b" text-anchor="middle">Reads the mailbox</text>
-  <text x="375.7" y="343.7" fill="#8b8b8b" text-anchor="middle">[IMAP over TLS]</text>
+  <text x="410" y="278.78" fill="#8b8b8b" text-anchor="middle">Reads the mailbox</text>
+  <text x="410" y="294.78" fill="#8b8b8b" text-anchor="middle">[IMAP over TLS]</text>
   </g>
-  <path d="M 745.4 315.5 C 835.16 315.5, 880.04 315.5, 969.8 315.5" fill="none" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#arrow-5c5c7c)"/>
-  <rect x="776.6" y="307.5" width="162" height="16" fill="#111111"/>
+  <line x1="814" y1="301.5" x2="1092" y2="301.5" stroke="#5c5c7c" stroke-width="1.6" marker-end="url(#r6206dd58-arrow-5c5c7c)"/>
+  <rect x="872" y="293.5" width="162" height="16" fill="#111111"/>
   <g font-size="12px">
-  <text x="857.6" y="319.7" fill="#8b8b8b" text-anchor="middle">Posts webhooks [HTTP]</text>
+  <text x="953" y="305.7" fill="#8b8b8b" text-anchor="middle">Posts webhooks [HTTP]</text>
   </g>
 </svg>

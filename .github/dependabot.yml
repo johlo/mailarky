@@ -21,7 +21,7 @@ updates:
         patterns: ['*']
 
   - package-ecosystem: docker
-    directory: /
+    directories: [/, /docker/alps]
     schedule:
       interval: weekly
     # A new Go release also needs go.mod changed, so only take patches and

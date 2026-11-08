@@ -118,7 +118,8 @@ curl -fsS -X POST http://localhost:8026/api/v1/accounts/ACCOUNT_ID/messages \
 `from` and at least one `to` are required; unknown fields are rejected.
 `flags: ["\\Seen"]` makes a message already read. For attachments, threads or
 unusual MIME, POST a raw `.eml` with `Content-Type: message/rfc822` and
-`?folder=INBOX`. Accounts start with `INBOX`, `Sent` and `Archive`; create
+`?folder=INBOX`. Accounts start with `INBOX`, `Sent`, `Drafts`, `Trash`, `Junk`
+and `Archive`; create
 others with `POST {api_base}/folders` and `{"name": "History"}`. Seeded mail is visible over IMAP immediately, including
 to a client that is idling.
 
@@ -196,7 +197,7 @@ IDLE timeouts, lost acknowledgements) and the constraints that trip people up.
   doesn't issue tokens, so stub the application's token endpoint. See
   [test OAuth authentication](https://github.com/johlo/mailarky/blob/main/docs/how-to/integrate-with-application.md#test-oauth-authentication).
 - **Browsing mail by hand:** the repository's Compose file has an optional
-  Roundcube webmail profile.
+  Alps webmail profile.
 
 ## Troubleshooting
 

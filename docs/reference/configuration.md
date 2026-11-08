@@ -29,7 +29,7 @@ YAML, environment variables, and flags. Booleans accept `true`/`false`.
 Port variables set `:PORT`; full bind-address variables override them. In
 Compose, port variables control the published host ports and are not passed
 through to container listeners. `MAILARKY_WEBMAIL_PORT` is Compose-only,
-defaulting to 8027 for Roundcube.
+defaulting to 8027 for Alps.
 
 Username/password configure the default account for both SMTP and IMAP.
 Runtime accounts receive credentials through the HTTP API. SMTP AUTH always

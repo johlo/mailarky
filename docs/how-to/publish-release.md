@@ -61,7 +61,7 @@ The binary and Docker image report the release version and Git commit. The
 
 ## Validate packaging locally
 
-Install [GoReleaser v2.18.2](https://goreleaser.com/install/), then run:
+Install [GoReleaser v2.20.0](https://goreleaser.com/install/), then run:
 
 ```sh
 goreleaser check

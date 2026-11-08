@@ -2,7 +2,7 @@
 
 The listener uses implicit TLS and account credentials shared with SMTP AUTH.
 Every account has its own folders and UID space. Initial folders are `INBOX`,
-`Sent`, `Archive`, and the configured SMTP folder.
+`Sent`, `Drafts`, `Trash`, `Junk`, `Archive`, and the configured SMTP folder.
 Authentication supports LOGIN, SASL PLAIN, and test-token XOAUTH2.
 
 | Operation | Behavior |

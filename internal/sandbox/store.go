@@ -125,7 +125,7 @@ func openStore(c storeOptions) (*Store, error) {
 			return nil, err
 		}
 	}
-	for _, name := range []string{"INBOX", "Sent", "Archive", c.SMTPFolder} {
+	for _, name := range []string{"INBOX", "Sent", "Drafts", "Trash", "Junk", "Archive", c.SMTPFolder} {
 		if _, ok := b.state.Folders[name]; !ok {
 			b.state.Folders[name] = folderState{Name: name, NextUID: 1, Subscribed: true, Validity: newValidity()}
 		}
