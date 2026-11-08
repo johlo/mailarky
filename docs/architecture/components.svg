@@ -1,126 +1,125 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1127" viewBox="0 0 1500 1127" font-family="'DejaVu Sans Mono', 'Menlo', 'Consolas', 'Liberation Mono', 'Courier New', monospace" font-size="14px">
+<svg xmlns="http://www.w3.org/2000/svg" width="1519" height="1167" viewBox="0 0 1519 1167" font-family="'DejaVu Sans Mono', 'Menlo', 'Consolas', 'Liberation Mono', 'Courier New', monospace" font-size="14px">
   <defs>
-    <marker id="arrow-7c83a0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#7c83a0"/>
-    </marker>
-    <marker id="arrow-7c83a0-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker id="rb67a6954-arrow-7c83a0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#7c83a0"/>
     </marker>
   </defs>
-  <rect x="0" y="0" width="1500" height="1127" fill="#ffffff"/>
-  <path d="M48 173 H1135.4 a8 8 0 0 1 8 8 V917 a8 8 0 0 1 -8 8 H48 a8 8 0 0 1 -8 -8 V181 a8 8 0 0 1 8 -8 Z" fill="none" stroke="#3a7d44"/>
-  <text x="54" y="201.4" fill="#1f2328" text-anchor="start">Mailarky service <tspan fill="#6e7781">[Container: Go]</tspan></text>
-  <path d="M340 216 H571 a8 8 0 0 1 8 8 V331 a8 8 0 0 1 -8 8 H340 a8 8 0 0 1 -8 -8 V224 a8 8 0 0 1 8 -8 Z" fill="#cedfd0" stroke="#3a7d44"/>
-  <text x="455.5" y="244.4" fill="#1f2328" text-anchor="middle">IMAP server</text>
-  <text x="455.5" y="263.4" fill="#6e7781" text-anchor="middle">[Component: go-imap v2]</text>
-  <text x="455.5" y="282.4" fill="#1f2328" text-anchor="middle">Serves folders over TLS</text>
-  <text x="455.5" y="301.4" fill="#1f2328" text-anchor="middle">IMAP4rev1 and applies IMAP</text>
-  <text x="455.5" y="320.4" fill="#1f2328" text-anchor="middle">faults</text>
-  <path d="M62 225.5 H268 a8 8 0 0 1 8 8 V321.5 a8 8 0 0 1 -8 8 H62 a8 8 0 0 1 -8 -8 V233.5 a8 8 0 0 1 8 -8 Z" fill="#cedfd0" stroke="#3a7d44"/>
-  <text x="165" y="253.9" fill="#1f2328" text-anchor="middle">SMTP server</text>
-  <text x="165" y="272.9" fill="#6e7781" text-anchor="middle">[Component: go-smtp]</text>
-  <text x="165" y="291.9" fill="#1f2328" text-anchor="middle">Captures deliveries and</text>
-  <text x="165" y="310.9" fill="#1f2328" text-anchor="middle">applies SMTP faults</text>
-  <path d="M643 216 H840 a8 8 0 0 1 8 8 V331 a8 8 0 0 1 -8 8 H643 a8 8 0 0 1 -8 -8 V224 a8 8 0 0 1 8 -8 Z" fill="#cedfd0" stroke="#3a7d44"/>
-  <text x="741.5" y="244.4" fill="#1f2328" text-anchor="middle">HTTP API</text>
-  <text x="741.5" y="263.4" fill="#6e7781" text-anchor="middle">[Component: net/http]</text>
-  <text x="741.5" y="282.4" fill="#1f2328" text-anchor="middle">Fixtures, search,</text>
-  <text x="741.5" y="301.4" fill="#1f2328" text-anchor="middle">inspection, faults and</text>
-  <text x="741.5" y="320.4" fill="#1f2328" text-anchor="middle">account management</text>
-  <path d="M197.5 449 H713.5 a8 8 0 0 1 8 8 V545 a8 8 0 0 1 -8 8 H197.5 a8 8 0 0 1 -8 -8 V457 a8 8 0 0 1 8 -8 Z" fill="#cedfd0" stroke="#3a7d44"/>
-  <text x="455.5" y="477.4" fill="#1f2328" text-anchor="middle">Service</text>
-  <text x="455.5" y="496.4" fill="#6e7781" text-anchor="middle">[Component]</text>
-  <text x="455.5" y="515.4" fill="#1f2328" text-anchor="middle">Config, server faults and account catalog. Routes SMTP AUTH,</text>
-  <text x="455.5" y="534.4" fill="#1f2328" text-anchor="middle">anonymous recipients and IMAP logins</text>
-  <path d="M145 663 H698 a8 8 0 0 1 8 8 V835 a8 8 0 0 1 -8 8 H145 a8 8 0 0 1 -8 -8 V671 a8 8 0 0 1 8 -8 Z" fill="#f6f7fa" stroke="#3a7d44"/>
+  <rect x="0" y="0" width="1519" height="1167" fill="#ffffff"/>
+  <path d="M48 255 H1108 a8 8 0 0 1 8 8 V971 a8 8 0 0 1 -8 8 H48 a8 8 0 0 1 -8 -8 V263 a8 8 0 0 1 8 -8 Z" fill="none" stroke="#3a7d44"/>
+  <text x="443.5" y="283.4" fill="#1f2328" text-anchor="start">Mailarky service <tspan fill="#6e7781">[Container: Go]</tspan></text>
+  <path d="M332 298 H563 a8 8 0 0 1 8 8 V413 a8 8 0 0 1 -8 8 H332 a8 8 0 0 1 -8 -8 V306 a8 8 0 0 1 8 -8 Z" fill="#cedfd0" stroke="#3a7d44"/>
+  <text x="447.5" y="326.4" fill="#1f2328" text-anchor="middle">IMAP server</text>
+  <text x="447.5" y="345.4" fill="#6e7781" text-anchor="middle">[Component: go-imap v2]</text>
+  <text x="447.5" y="364.4" fill="#1f2328" text-anchor="middle">Serves folders over TLS</text>
+  <text x="447.5" y="383.4" fill="#1f2328" text-anchor="middle">IMAP4rev1 and applies IMAP</text>
+  <text x="447.5" y="402.4" fill="#1f2328" text-anchor="middle">faults</text>
+  <path d="M62 307.5 H268 a8 8 0 0 1 8 8 V403.5 a8 8 0 0 1 -8 8 H62 a8 8 0 0 1 -8 -8 V315.5 a8 8 0 0 1 8 -8 Z" fill="#cedfd0" stroke="#3a7d44"/>
+  <text x="165" y="335.9" fill="#1f2328" text-anchor="middle">SMTP server</text>
+  <text x="165" y="354.9" fill="#6e7781" text-anchor="middle">[Component: go-smtp]</text>
+  <text x="165" y="373.9" fill="#1f2328" text-anchor="middle">Captures deliveries and</text>
+  <text x="165" y="392.9" fill="#1f2328" text-anchor="middle">applies SMTP faults</text>
+  <path d="M627 298 H824 a8 8 0 0 1 8 8 V413 a8 8 0 0 1 -8 8 H627 a8 8 0 0 1 -8 -8 V306 a8 8 0 0 1 8 -8 Z" fill="#cedfd0" stroke="#3a7d44"/>
+  <text x="725.5" y="326.4" fill="#1f2328" text-anchor="middle">HTTP API</text>
+  <text x="725.5" y="345.4" fill="#6e7781" text-anchor="middle">[Component: net/http]</text>
+  <text x="725.5" y="364.4" fill="#1f2328" text-anchor="middle">Fixtures, search,</text>
+  <text x="725.5" y="383.4" fill="#1f2328" text-anchor="middle">inspection, faults and</text>
+  <text x="725.5" y="402.4" fill="#1f2328" text-anchor="middle">account management</text>
+  <path d="M189.5 517 H705.5 a8 8 0 0 1 8 8 V613 a8 8 0 0 1 -8 8 H189.5 a8 8 0 0 1 -8 -8 V525 a8 8 0 0 1 8 -8 Z" fill="#cedfd0" stroke="#3a7d44"/>
+  <text x="447.5" y="545.4" fill="#1f2328" text-anchor="middle">Service</text>
+  <text x="447.5" y="564.4" fill="#6e7781" text-anchor="middle">[Component]</text>
+  <text x="447.5" y="583.4" fill="#1f2328" text-anchor="middle">Config, server faults and account catalog. Routes SMTP AUTH,</text>
+  <text x="447.5" y="602.4" fill="#1f2328" text-anchor="middle">anonymous recipients and IMAP logins</text>
+  <path d="M141 717 H754 a8 8 0 0 1 8 8 V957 a8 8 0 0 1 -8 8 H141 a8 8 0 0 1 -8 -8 V725 a8 8 0 0 1 8 -8 Z" fill="none" stroke="none"/>
 
-  <path d="M179 697 H732 a8 8 0 0 1 8 8 V869 a8 8 0 0 1 -8 8 H179 a8 8 0 0 1 -8 -8 V705 a8 8 0 0 1 8 -8 Z" fill="#f6f7fa" stroke="#3a7d44"/>
+  <path d="M141 717 H686 a8 8 0 0 1 8 8 V889 a8 8 0 0 1 -8 8 H141 a8 8 0 0 1 -8 -8 V725 a8 8 0 0 1 8 -8 Z" fill="#eef0f7" stroke="#3a7d44"/>
 
-  <path d="M213 731 H766 a8 8 0 0 1 8 8 V903 a8 8 0 0 1 -8 8 H213 a8 8 0 0 1 -8 -8 V739 a8 8 0 0 1 8 -8 Z" fill="#eef0f7" stroke="#3a7d44"/>
-  <text x="219" y="759.4" fill="#1f2328" text-anchor="start">Account <tspan fill="#6e7781">[one per test]</tspan></text>
-  <path d="M227 774 H458 a8 8 0 0 1 8 8 V889 a8 8 0 0 1 -8 8 H227 a8 8 0 0 1 -8 -8 V782 a8 8 0 0 1 8 -8 Z" fill="#cedfd0" stroke="#3a7d44"/>
-  <text x="342.5" y="802.4" fill="#1f2328" text-anchor="middle">Message store</text>
-  <text x="342.5" y="821.4" fill="#6e7781" text-anchor="middle">[Component]</text>
-  <text x="342.5" y="840.4" fill="#1f2328" text-anchor="middle">Raw MIME, folders, UIDs,</text>
-  <text x="342.5" y="859.4" fill="#1f2328" text-anchor="middle">flags. One append path for</text>
-  <text x="342.5" y="878.4" fill="#1f2328" text-anchor="middle">every protocol</text>
-  <path d="M530 774 H752 a8 8 0 0 1 8 8 V889 a8 8 0 0 1 -8 8 H530 a8 8 0 0 1 -8 -8 V782 a8 8 0 0 1 8 -8 Z" fill="#cedfd0" stroke="#3a7d44"/>
-  <text x="641" y="802.4" fill="#1f2328" text-anchor="middle">Account fault registry</text>
-  <text x="641" y="821.4" fill="#6e7781" text-anchor="middle">[Component]</text>
-  <text x="641" y="840.4" fill="#1f2328" text-anchor="middle">Trigger, filter and typed</text>
-  <text x="641" y="859.4" fill="#1f2328" text-anchor="middle">action. Atomic claims,</text>
-  <text x="641" y="878.4" fill="#1f2328" text-anchor="middle">unlocked execution</text>
-  <path d="M941.4 735 H1121.4 a8 8 0 0 1 8 8 V831 a8 8 0 0 1 -8 8 H941.4 a8 8 0 0 1 -8 -8 V743 a8 8 0 0 1 8 -8 Z" fill="#cedfd0" stroke="#3a7d44"/>
-  <text x="1031.4" y="763.4" fill="#1f2328" text-anchor="middle">Notifications</text>
-  <text x="1031.4" y="782.4" fill="#6e7781" text-anchor="middle">[Component]</text>
-  <text x="1031.4" y="801.4" fill="#1f2328" text-anchor="middle">WebSocket stream and</text>
-  <text x="1031.4" y="820.4" fill="#1f2328" text-anchor="middle">webhooks</text>
-  <path d="M218 40 H415 a8 8 0 0 1 8 8 V98 a8 8 0 0 1 -8 8 H218 a8 8 0 0 1 -8 -8 V48 a8 8 0 0 1 8 -8 Z" fill="#eef0f7" stroke="#8a90a8"/>
-  <text x="316.5" y="68.4" fill="#1f2328" text-anchor="middle">Application under test</text>
-  <text x="316.5" y="87.4" fill="#6e7781" text-anchor="middle">[External system]</text>
-  <path d="M659.5 40 H823.5 a8 8 0 0 1 8 8 V98 a8 8 0 0 1 -8 8 H659.5 a8 8 0 0 1 -8 -8 V48 a8 8 0 0 1 8 -8 Z" fill="#ecd0ce" stroke="#b3423a"/>
-  <text x="741.5" y="68.4" fill="#1f2328" text-anchor="middle">Test suite</text>
-  <text x="741.5" y="87.4" fill="#6e7781" text-anchor="middle">[Person or CI job]</text>
-  <path d="M324.5 1021 H586.5 a8 8 0 0 1 8 8 V1079 a8 8 0 0 1 -8 8 H324.5 a8 8 0 0 1 -8 -8 V1029 a8 8 0 0 1 8 -8 Z" fill="#eef0f7" stroke="#8a90a8"/>
-  <text x="431.5" y="1049.4" fill="#1f2328" text-anchor="middle">Message database</text>
-  <text x="431.5" y="1068.4" fill="#6e7781" text-anchor="middle">[Container: bbolt files]</text>
-  <g transform="translate(542.5 1035) scale(1.58333)">
+  <path d="M175 751 H720 a8 8 0 0 1 8 8 V923 a8 8 0 0 1 -8 8 H175 a8 8 0 0 1 -8 -8 V759 a8 8 0 0 1 8 -8 Z" fill="#eef0f7" stroke="#3a7d44"/>
+
+  <path d="M209 785 H754 a8 8 0 0 1 8 8 V957 a8 8 0 0 1 -8 8 H209 a8 8 0 0 1 -8 -8 V793 a8 8 0 0 1 8 -8 Z" fill="#eef0f7" stroke="#3a7d44"/>
+  <text x="215" y="813.4" fill="#1f2328" text-anchor="start">Account <tspan fill="#6e7781">[one per test]</tspan></text>
+  <path d="M223 828 H454 a8 8 0 0 1 8 8 V943 a8 8 0 0 1 -8 8 H223 a8 8 0 0 1 -8 -8 V836 a8 8 0 0 1 8 -8 Z" fill="#cedfd0" stroke="#3a7d44"/>
+  <text x="338.5" y="856.4" fill="#1f2328" text-anchor="middle">Message store</text>
+  <text x="338.5" y="875.4" fill="#6e7781" text-anchor="middle">[Component]</text>
+  <text x="338.5" y="894.4" fill="#1f2328" text-anchor="middle">Raw MIME, folders, UIDs,</text>
+  <text x="338.5" y="913.4" fill="#1f2328" text-anchor="middle">flags. One append path for</text>
+  <text x="338.5" y="932.4" fill="#1f2328" text-anchor="middle">every protocol</text>
+  <path d="M518 828 H740 a8 8 0 0 1 8 8 V943 a8 8 0 0 1 -8 8 H518 a8 8 0 0 1 -8 -8 V836 a8 8 0 0 1 8 -8 Z" fill="#cedfd0" stroke="#3a7d44"/>
+  <text x="629" y="856.4" fill="#1f2328" text-anchor="middle">Account fault registry</text>
+  <text x="629" y="875.4" fill="#6e7781" text-anchor="middle">[Component]</text>
+  <text x="629" y="894.4" fill="#1f2328" text-anchor="middle">Trigger, filter and typed</text>
+  <text x="629" y="913.4" fill="#1f2328" text-anchor="middle">action. Atomic claims,</text>
+  <text x="629" y="932.4" fill="#1f2328" text-anchor="middle">unlocked execution</text>
+  <path d="M914 789 H1094 a8 8 0 0 1 8 8 V885 a8 8 0 0 1 -8 8 H914 a8 8 0 0 1 -8 -8 V797 a8 8 0 0 1 8 -8 Z" fill="#cedfd0" stroke="#3a7d44"/>
+  <text x="1004" y="817.4" fill="#1f2328" text-anchor="middle">Notifications</text>
+  <text x="1004" y="836.4" fill="#6e7781" text-anchor="middle">[Component]</text>
+  <text x="1004" y="855.4" fill="#1f2328" text-anchor="middle">WebSocket stream and</text>
+  <text x="1004" y="874.4" fill="#1f2328" text-anchor="middle">webhooks</text>
+  <path d="M214 40 H411 a8 8 0 0 1 8 8 V98 a8 8 0 0 1 -8 8 H214 a8 8 0 0 1 -8 -8 V48 a8 8 0 0 1 8 -8 Z" fill="#eef0f7" stroke="#8a90a8"/>
+  <text x="312.5" y="68.4" fill="#1f2328" text-anchor="middle">Application under test</text>
+  <text x="312.5" y="87.4" fill="#6e7781" text-anchor="middle">[External system]</text>
+  <path d="M643.5 40 H807.5 a8 8 0 0 1 8 8 V98 a8 8 0 0 1 -8 8 H643.5 a8 8 0 0 1 -8 -8 V48 a8 8 0 0 1 8 -8 Z" fill="#ecd0ce" stroke="#b3423a"/>
+  <text x="725.5" y="68.4" fill="#1f2328" text-anchor="middle">Test suite</text>
+  <text x="725.5" y="87.4" fill="#6e7781" text-anchor="middle">[Person or CI job]</text>
+  <path d="M315.5 1061 H579.5 a8 8 0 0 1 8 8 V1119 a8 8 0 0 1 -8 8 H315.5 a8 8 0 0 1 -8 -8 V1069 a8 8 0 0 1 8 -8 Z" fill="#eef0f7" stroke="#8a90a8"/>
+  <text x="422.5" y="1089.4" fill="#1f2328" text-anchor="middle">Message database</text>
+  <text x="422.5" y="1108.4" fill="#6e7781" text-anchor="middle">[Container: bbolt files]</text>
+  <g transform="translate(535.5 1075) scale(1.58333)">
     <path d="M3 6.4 v11.2 a9 3.4 0 0 0 18 0 v-11.2 Z" fill="#d6d9e6" stroke="#57606a" stroke-width="1.1" stroke-linejoin="round"/>
     <path d="M3 6.4 a9 3.4 0 0 1 18 0 a9 3.4 0 0 1 -18 0 Z" fill="#d6d9e6" stroke="#57606a" stroke-width="1.1" stroke-linejoin="round"/>
     <path d="M3 11 a9 3.4 0 0 0 18 0" fill="none" stroke="#57606a" stroke-width="1.1" stroke-linejoin="round"/>
     <path d="M3 15.6 a9 3.4 0 0 0 18 0" fill="none" stroke="#57606a" stroke-width="1.1" stroke-linejoin="round"/>
   </g>
-  <path d="M1296.8 754 H1451.8 a8 8 0 0 1 8 8 V812 a8 8 0 0 1 -8 8 H1296.8 a8 8 0 0 1 -8 -8 V762 a8 8 0 0 1 8 -8 Z" fill="#eef0f7" stroke="#8a90a8"/>
-  <text x="1374.3" y="782.4" fill="#1f2328" text-anchor="middle">Webhook receiver</text>
-  <text x="1374.3" y="801.4" fill="#6e7781" text-anchor="middle">[External system]</text>
-  <path d="M 308.5 106 C 308.5 180.7, 165 150.8, 165 225.5" fill="none" stroke="#7c83a0" stroke-width="1.6" marker-end="url(#arrow-7c83a0)"/>
-  <rect x="170.25" y="157.75" width="133" height="16" fill="#ffffff"/>
+  <path d="M1316 808 H1471 a8 8 0 0 1 8 8 V866 a8 8 0 0 1 -8 8 H1316 a8 8 0 0 1 -8 -8 V816 a8 8 0 0 1 8 -8 Z" fill="#eef0f7" stroke="#8a90a8"/>
+  <text x="1393.5" y="836.4" fill="#1f2328" text-anchor="middle">Webhook receiver</text>
+  <text x="1393.5" y="855.4" fill="#6e7781" text-anchor="middle">[External system]</text>
+  <line x1="277" y1="106" x2="165" y2="307.5" stroke="#7c83a0" stroke-width="1.6" marker-end="url(#rb67a6954-arrow-7c83a0)"/>
+  <rect x="154.5" y="198.75" width="133" height="16" fill="#ffffff"/>
   <g font-size="12px">
-  <text x="236.75" y="169.95" fill="#6e7781" text-anchor="middle">Sends mail [SMTP]</text>
+  <text x="221" y="210.95" fill="#6e7781" text-anchor="middle">Sends mail [SMTP]</text>
   </g>
-  <path d="M 324.5 106 C 324.5 174.42, 455.5 147.58, 455.5 216" fill="none" stroke="#7c83a0" stroke-width="1.6" marker-end="url(#arrow-7c83a0)"/>
-  <rect x="320" y="153" width="140" height="16" fill="#ffffff"/>
+  <line x1="348" y1="106" x2="447.5" y2="298" stroke="#7c83a0" stroke-width="1.6" marker-end="url(#rb67a6954-arrow-7c83a0)"/>
+  <rect x="327.75" y="194" width="140" height="16" fill="#ffffff"/>
   <g font-size="12px">
-  <text x="390" y="165.2" fill="#6e7781" text-anchor="middle">Reads mail [IMAPS]</text>
+  <text x="397.75" y="206.2" fill="#6e7781" text-anchor="middle">Reads mail [IMAPS]</text>
   </g>
-  <path d="M 741.5 106 C 741.5 150, 741.5 172, 741.5 216" fill="none" stroke="#7c83a0" stroke-width="1.6" marker-end="url(#arrow-7c83a0)"/>
-  <rect x="599.5" y="153" width="284" height="16" fill="#ffffff"/>
+  <line x1="725.5" y1="106" x2="725.5" y2="298" stroke="#7c83a0" stroke-width="1.6" marker-end="url(#rb67a6954-arrow-7c83a0)"/>
+  <rect x="583.5" y="194" width="284" height="16" fill="#ffffff"/>
   <g font-size="12px">
-  <text x="741.5" y="165.2" fill="#6e7781" text-anchor="middle">Seeds, inspects, injects faults [HTTP]</text>
+  <text x="725.5" y="206.2" fill="#6e7781" text-anchor="middle">Seeds, inspects, injects faults [HTTP]</text>
   </g>
-  <path d="M 165 329.5 C 165 398.8, 120.2 501, 189.5 501" fill="none" stroke="#7c83a0" stroke-width="1.6" marker-end="url(#arrow-7c83a0)"/>
-  <rect x="84.76" y="433.24" width="133" height="16" fill="#ffffff"/>
+  <line x1="165" y1="411.5" x2="181.5" y2="569" stroke="#7c83a0" stroke-width="1.6" marker-end="url(#rb67a6954-arrow-7c83a0)"/>
+  <rect x="106.75" y="482.25" width="133" height="16" fill="#ffffff"/>
   <g font-size="12px">
-  <text x="151.26" y="445.44" fill="#6e7781" text-anchor="middle">Routes AUTH first</text>
+  <text x="173.25" y="494.45" fill="#6e7781" text-anchor="middle">Routes AUTH first</text>
   </g>
-  <path d="M 455.5 339 C 455.5 383, 455.5 405, 455.5 449" fill="none" stroke="#7c83a0" stroke-width="1.6" marker-end="url(#arrow-7c83a0)"/>
-  <rect x="425" y="386" width="61" height="16" fill="#ffffff"/>
+  <line x1="447.5" y1="421" x2="447.5" y2="517" stroke="#7c83a0" stroke-width="1.6" marker-end="url(#rb67a6954-arrow-7c83a0)"/>
+  <rect x="417" y="461" width="61" height="16" fill="#ffffff"/>
   <g font-size="12px">
-  <text x="455.5" y="398.2" fill="#6e7781" text-anchor="middle">Logs in</text>
+  <text x="447.5" y="473.2" fill="#6e7781" text-anchor="middle">Logs in</text>
   </g>
-  <path d="M 741.5 339 C 741.5 404.29, 786.79 501, 721.5 501" fill="none" stroke="#7c83a0" stroke-width="1.6" marker-end="url(#arrow-7c83a0)"/>
-  <rect x="689.48" y="436.48" width="133" height="16" fill="#ffffff"/>
+  <line x1="725.5" y1="421" x2="713.5" y2="569" stroke="#7c83a0" stroke-width="1.6" marker-end="url(#rb67a6954-arrow-7c83a0)"/>
+  <rect x="653" y="487" width="133" height="16" fill="#ffffff"/>
   <g font-size="12px">
-  <text x="755.98" y="448.68" fill="#6e7781" text-anchor="middle">Resolves api_base</text>
+  <text x="719.5" y="499.2" fill="#6e7781" text-anchor="middle">Resolves api_base</text>
   </g>
-  <path d="M 455.5 553 C 455.5 625.49, 489.5 658.51, 489.5 731" fill="none" stroke="#7c83a0" stroke-width="1.6" marker-end="url(#arrow-7c83a0)"/>
-  <rect x="413.5" y="634" width="118" height="16" fill="#ffffff"/>
+  <line x1="447.5" y1="621" x2="447.5" y2="717" stroke="#7c83a0" stroke-width="1.6" marker-end="url(#rb67a6954-arrow-7c83a0)"/>
+  <rect x="388.5" y="661" width="118" height="16" fill="#ffffff"/>
   <g font-size="12px">
-  <text x="472.5" y="646.2" fill="#6e7781" text-anchor="middle">Selects account</text>
+  <text x="447.5" y="673.2" fill="#6e7781" text-anchor="middle">Selects account</text>
   </g>
-  <path d="M 774 821 C 839.19 821, 868.21 787, 933.4 787" fill="none" stroke="#7c83a0" stroke-width="1.6" marker-end="url(#arrow-7c83a0)"/>
-  <rect x="805.2" y="796" width="97" height="16" fill="#ffffff"/>
+  <line x1="762" y1="841" x2="906" y2="841" stroke="#7c83a0" stroke-width="1.6" marker-end="url(#rb67a6954-arrow-7c83a0)"/>
+  <rect x="785.5" y="833" width="97" height="16" fill="#ffffff"/>
   <g font-size="12px">
-  <text x="853.7" y="808.2" fill="#6e7781" text-anchor="middle">Emits events</text>
+  <text x="834" y="845.2" fill="#6e7781" text-anchor="middle">Emits events</text>
   </g>
-  <path d="M 342.5 897 C 342.5 964.11, 455.5 953.89, 455.5 1021" fill="none" stroke="#7c83a0" stroke-width="1.6" marker-end="url(#arrow-7c83a0)"/>
-  <rect x="336" y="951" width="126" height="16" fill="#ffffff"/>
+  <line x1="338.5" y1="951" x2="447.5" y2="1061" stroke="#7c83a0" stroke-width="1.6" marker-end="url(#rb67a6954-arrow-7c83a0)"/>
+  <rect x="330" y="998" width="126" height="16" fill="#ffffff"/>
   <g font-size="12px">
-  <text x="399" y="963.2" fill="#6e7781" text-anchor="middle">Persists [bbolt]</text>
+  <text x="393" y="1010.2" fill="#6e7781" text-anchor="middle">Persists [bbolt]</text>
   </g>
-  <path d="M 1129.4 787 C 1193.16 787, 1225.04 787, 1288.8 787" fill="none" stroke="#7c83a0" stroke-width="1.6" marker-end="url(#arrow-7c83a0)"/>
-  <rect x="1160.6" y="779" width="97" height="16" fill="#ffffff"/>
+  <line x1="1102" y1="841" x2="1308" y2="841" stroke="#7c83a0" stroke-width="1.6" marker-end="url(#rb67a6954-arrow-7c83a0)"/>
+  <rect x="1156.5" y="833" width="97" height="16" fill="#ffffff"/>
   <g font-size="12px">
-  <text x="1209.1" y="791.2" fill="#6e7781" text-anchor="middle">Posts [HTTP]</text>
+  <text x="1205" y="845.2" fill="#6e7781" text-anchor="middle">Posts [HTTP]</text>
   </g>
 </svg>

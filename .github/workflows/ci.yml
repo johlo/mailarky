@@ -23,14 +23,16 @@ jobs:
       - name: Check release configuration
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
-          version: v2.18.2
+          version: v2.20.0
           args: check
-      - run: docker compose up -d --build --wait --wait-timeout 60
+      - run: docker compose --profile webmail up -d --build --wait --wait-timeout 60
       - name: SMTP, HTTP, TLS IMAP and fault isolation smoke test
         run: python3 scripts/smoke.py
+      - name: Alps webmail integration smoke test
+        run: python3 scripts/webmail_smoke.py
       - name: Container logs
         if: always()
-        run: docker compose logs
+        run: docker compose --profile webmail logs
       - name: Stop containers
         if: always()
-        run: docker compose down
+        run: docker compose --profile webmail down

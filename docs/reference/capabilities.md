@@ -13,7 +13,7 @@
 | Test OAuth | Account-specific XOAUTH2 tokens for SMTP/IMAP, valid/expired/rejected states, expiry and rotation; no provider HTTP OAuth service |
 | State | Memory or bbolt; immutable raw MIME; stable persisted UID identity; opt-in per-account retention |
 | Observability | Bounded per-account SMTP/IMAP command history with timing, connection IDs, and response codes; WebSocket events, asynchronous webhooks, optional Prometheus metrics |
-| Webmail | Optional Roundcube Compose profile using authenticated SMTP and TLS IMAP |
+| Webmail | Optional Alps Compose profile using authenticated SMTP and TLS IMAP |
 
 The service has no mail relay, forwarding, POP3, built-in webmail, tags, HTML
 compatibility checks, link checks, SpamAssassin integration, thumbnails, or

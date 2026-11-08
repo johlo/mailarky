@@ -21,25 +21,25 @@ services:
       - "127.0.0.1:${MAILARKY_HTTP_PORT:-8026}:8026"
 
   webmail:
-    image: roundcube/roundcubemail:1.7.4-apache@sha256:93c6ccb63ce2feccb107c0eca128f8625ac4c3e9e42329e44d0a60da66a70a40
+    image: mailarky-alps:local
+    build:
+      context: .
+      dockerfile: docker/alps/Dockerfile
     profiles: [webmail]
     depends_on:
       mailarky:
         condition: service_healthy
     ports:
-      - "127.0.0.1:${MAILARKY_WEBMAIL_PORT:-8027}:80"
+      - "127.0.0.1:${MAILARKY_WEBMAIL_PORT:-8027}:1323"
     environment:
-      ROUNDCUBEMAIL_DEFAULT_HOST: ssl://mailarky
-      ROUNDCUBEMAIL_DEFAULT_PORT: "1993"
-      ROUNDCUBEMAIL_SMTP_SERVER: tls://mailarky
-      ROUNDCUBEMAIL_SMTP_PORT: "1025"
-      ROUNDCUBEMAIL_DB_TYPE: sqlite
+      SSL_CERT_FILE: /certs/mailarky.crt
     volumes:
-      - ./docker/roundcube/config.inc.php:/var/roundcube/config/sandbox.php:ro
+      - ./docker/alps/config.toml:/etc/alps/config.toml:ro
       - ./testdata/tls/server.crt:/certs/mailarky.crt:ro
     healthcheck:
-      test: [CMD, php, -r, "exit(file_get_contents('http://127.0.0.1/') === false ? 1 : 0);"]
+      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:1323/"]
       interval: 5s
       timeout: 3s
       retries: 10
       start_period: 20s
+      start_interval: 250ms

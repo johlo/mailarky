@@ -63,13 +63,13 @@ curl -fsS -o mailarky.crt "http://localhost:${MAILARKY_HTTP_PORT:-8026}/api/v1/c
 ```
 
 The default credentials are `user@example.test` / `local-imap-only`, or use a
-test account's generated credentials. For optional Roundcube webmail on port
-8027, follow [view mail in a browser](docs/how-to/run-and-test.md#view-mail-in-a-browser).
+test account's generated credentials. To inspect messages in a browser, use
+[Alps webmail](#inspect-mail-with-alps).
 
 All published ports bind to loopback. Set `MAILARKY_SMTP_PORT`,
 `MAILARKY_IMAP_PORT`, and `MAILARKY_HTTP_PORT` to change them in the command
 above. See [configuration](docs/reference/configuration.md) for listener settings.
-Pin an image tag such as `ghcr.io/johlo/mailarky:v0.7.0` in CI;
+Pin an image tag such as `ghcr.io/johlo/mailarky:v0.8.0` in CI;
 `latest` follows stable releases. Stop and remove the container with
 `docker stop mailarky` and `docker rm mailarky`.
 
@@ -77,6 +77,42 @@ To use `go install` or a standalone binary, follow
 [run without Docker](docs/how-to/run-and-test.md#run-without-docker), including
 the local TLS certificate setup. Use `mailarky --help` for flags and
 `mailarky --version` to identify the installed build.
+
+## Inspect mail with Alps
+
+Use [Alps](https://github.com/migadu/alps) to browse captured and seeded mail,
+read message bodies, open attachments, and compose test messages. Choose the
+Compose setup to run Mailarky together with Alps:
+
+```sh
+git clone https://github.com/johlo/mailarky.git
+cd mailarky
+docker compose --profile webmail up -d --build --wait
+```
+
+The first run builds both services, including a pinned Alps version. Open
+<http://localhost:8027> and log in with `user@example.test` / `local-imap-only`,
+or the `username` and `password` returned when you created a test account.
+Browse **Sent** for captured SMTP submissions and **INBOX** for incoming
+fixtures. Each login sees only that account's mail.
+
+After the initial build, start the existing images without rebuilding:
+
+```sh
+docker compose --profile webmail up -d --no-build --wait
+```
+
+Use `--build` again after changing or updating the source checkout.
+
+Alps connects through TLS IMAP and SMTP STARTTLS. It is a real mail client:
+opening mail can mark it read, and its commands appear in command history and
+count toward account limits. Use the HTTP API for inspection that leaves read
+flags unchanged.
+
+Set `MAILARKY_WEBMAIL_PORT` to change the browser port. Stop the stack with
+`docker compose --profile webmail down`. See
+[browser setup and testing](docs/how-to/run-and-test.md#view-mail-in-a-browser)
+for configuration and verification details.
 
 ## An account per test
 

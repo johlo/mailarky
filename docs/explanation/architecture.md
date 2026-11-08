@@ -1,7 +1,7 @@
 # Architecture
 
 Mailarky runs SMTP, TLS IMAP, and HTTP in one Go process. Each account owns a
-separate Store and fault registry. An optional Roundcube container uses the
+separate Store and fault registry. An optional Alps container uses the
 same mail protocols as the application under test.
 
 ## System context
@@ -20,11 +20,11 @@ notifications. Toxiproxy may sit in front of either mail listener for TCP faults
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../architecture/containers-dark.svg">
-  <img alt="Mailarky protocol listeners, optional bbolt storage and Roundcube" src="../architecture/containers.svg">
+  <img alt="Mailarky protocol listeners, optional bbolt storage and Alps" src="../architecture/containers.svg">
 </picture>
 
 The Go process defaults to memory storage. With persistence, each account uses
-its own bbolt file. Roundcube is an optional Compose profile with verified TLS
+its own bbolt file. Alps is an optional Compose profile with verified TLS
 IMAP and STARTTLS SMTP. It authenticates both using the logged-in account.
 
 ## Components
