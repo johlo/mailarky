@@ -1,4 +1,4 @@
-# Mailarky documentation
+# <img src="../internal/webmail/assets/logo.svg" alt="" width="40" height="40"> Mailarky documentation
 
 ## Tutorial
 

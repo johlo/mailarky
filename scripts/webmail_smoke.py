@@ -65,6 +65,14 @@ def main():
         first, second = accounts
         client, other = clients
 
+        assert b"Open an account" in client.request("GET", "/")
+        assert b"<app-root>" in client.request("GET", "/alps")
+        listed = client.request("GET", "/mailarky/accounts")
+        assert {"default", first["id"], second["id"]} <= {a["id"] for a in listed}
+        assert all("password" not in a for a in listed)
+        client.request("DELETE", "/session")
+        assert client.request("POST", f"/mailarky/accounts/{first['id']}/login")["ok"]
+
         incoming = EmailMessage(policy=policy.SMTP)
         incoming["From"] = "Sender <sender@example.test>"
         incoming["To"] = "reader@example.test"
@@ -100,7 +108,7 @@ def main():
 
         client.request("PUT", "/settings", {"from": "Alps Smoke", "signature": "Saved via METADATA"})
         client.request("DELETE", "/session")
-        client.login(first)
+        assert client.request("POST", f"/mailarky/accounts/{first['id']}/login")["ok"]
         settings = client.request("GET", "/settings")["Settings"]
         assert settings["signature"] == "Saved via METADATA", settings
         assert other.request("GET", "/settings")["Settings"].get("signature", "") == ""
@@ -144,7 +152,16 @@ def main():
         assert any(e["protocol"] == "smtp" and e["command"] == "AUTH" and e["response"].startswith("235") for e in history["commands"])
         assert any(e["command"] == "SETMETADATA" and e["response"] == "OK" for e in history["commands"])
         assert any(e["command"] == "UID COPY" and e["response"].startswith("OK") for e in history["commands"])
-    print("Alps login, account isolation, message/attachment inspection, folders, settings, drafts and SMTP submission passed")
+
+        # The same browser session can choose a different account without using
+        # either account's original password or seeing the previous account's mail.
+        client.request("DELETE", "/session")
+        assert client.request("POST", f"/mailarky/accounts/{second['id']}/login")["ok"]
+        assert client.request("GET", "/mailboxes/INBOX?refresh=1")["Total"] == 0
+        switched = client.request("GET", "/mailboxes/Sent?refresh=1")
+        assert switched["Total"] == 1
+        assert switched["Messages"][0]["Envelope"]["Subject"] == "Case preserved"
+    print("Alps account picker, login, account isolation, message/attachment inspection, folders, settings, drafts and SMTP submission passed")
 
 
 if __name__ == "__main__":

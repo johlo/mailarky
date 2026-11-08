@@ -33,6 +33,7 @@ services:
       - "127.0.0.1:${MAILARKY_WEBMAIL_PORT:-8027}:1323"
     environment:
       SSL_CERT_FILE: /certs/mailarky.crt
+      MAILARKY_API_URL: http://mailarky:8026
     volumes:
       - ./docker/alps/config.toml:/etc/alps/config.toml:ro
       - ./testdata/tls/server.crt:/certs/mailarky.crt:ro

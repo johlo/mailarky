@@ -22,6 +22,19 @@ python3 scripts/smoke.py          # independent SMTP/IMAP clients against Docker
 Go tests use real SMTP and IMAP sockets. Add a socket-level test for protocol
 behavior changes, and a fault test for new fault triggers or actions.
 
+For changes to the optional Alps account picker, start
+`docker compose --profile webmail up -d --build --wait`, then run
+`python3 scripts/webmail_smoke.py` and the browser tests:
+
+```sh
+npm ci                            # Node.js 20 or newer
+npx playwright install chromium
+npm run test:webmail
+```
+
+See [browser testing](docs/how-to/run-and-test.md#view-mail-in-a-browser) for
+custom ports, headed runs, and failure artifacts.
+
 ## Pull requests
 
 - Keep each change focused, and describe the behavior it changes.

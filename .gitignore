@@ -5,3 +5,8 @@
 /*.db
 /*.db.mailboxes/
 /dist/
+/node_modules/
+/test-results/
+/playwright-report/
+/.playwright-cli/
+/output/playwright/

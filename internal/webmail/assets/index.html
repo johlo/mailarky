@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Accounts · Mailarky</title>
+  <link rel="icon" type="image/svg+xml" href="/mailarky/logo.svg">
+  <link rel="stylesheet" href="/mailarky/picker.css">
+  <script src="/mailarky/picker.js" defer></script>
+</head>
+<body>
+  <header class="masthead">
+    <a class="brand" href="/" aria-label="Mailarky accounts"><img class="brand-mark" src="/mailarky/logo.svg" alt="" width="34" height="34">Mailarky</a>
+    <span class="companion">Mail inspection with Alps</span>
+  </header>
+  <main>
+    <div class="intro">
+      <p class="eyebrow">TEST ACCOUNTS</p>
+      <h1>Open an account</h1>
+      <p class="description">Choose an account to inspect its mail in Alps.</p>
+    </div>
+    <div class="toolbar">
+      <label class="search-field">
+        <span class="sr-only">Search accounts</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m16 16 5 5"></path></svg>
+        <input id="search" type="search" placeholder="Search by name or username" autocomplete="off" spellcheck="false">
+      </label>
+      <button id="refresh" type="button" class="refresh">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"></path><path d="M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"></path></svg>
+        Refresh
+      </button>
+    </div>
+    <p id="error" class="error" role="alert" hidden></p>
+    <div class="list-heading"><span id="count">Accounts</span><span class="refresh-note">Updates automatically</span></div>
+    <ul id="accounts" class="accounts" aria-label="Test accounts" aria-busy="true"></ul>
+    <div id="empty" class="empty"><p id="empty-title">Loading accounts…</p><p id="empty-detail"></p></div>
+    <p id="status" class="sr-only" role="status" aria-live="polite"></p>
+    <footer>
+      <p>Opening mail can mark it read. Webmail activity counts toward account limits.</p>
+      <a href="/alps#/login">Sign in with a password <span aria-hidden="true">↗</span></a>
+    </footer>
+    <noscript><p class="error">Enable JavaScript to choose an account, or sign in with a password.</p></noscript>
+  </main>
+</body>
+</html>

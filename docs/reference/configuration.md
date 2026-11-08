@@ -31,6 +31,14 @@ Compose, port variables control the published host ports and are not passed
 through to container listeners. `MAILARKY_WEBMAIL_PORT` is Compose-only,
 defaulting to 8027 for Alps.
 
+The optional webmail container uses `MAILARKY_API_URL` for its account picker,
+set to `http://mailarky:8026` in Compose. Include `MAILARKY_WEBROOT` in this URL
+if configured. The URL must use HTTP or HTTPS, without embedded credentials,
+a query, or a fragment. The picker forwards the browser's HTTP Basic credentials
+to the control API. Unset or empty `MAILARKY_API_URL` disables the picker and
+restores the upstream Alps start page. This variable belongs to the Alps
+container; it is not a Mailarky server configuration option.
+
 Username/password configure the default account for both SMTP and IMAP.
 Runtime accounts receive credentials through the HTTP API. SMTP AUTH always
 uses account credentials; `smtp-require-auth` controls whether anonymous SMTP

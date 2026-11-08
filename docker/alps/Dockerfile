@@ -7,6 +7,9 @@ ADD https://github.com/migadu/alps.git#${ALPS_REVISION} /src
 WORKDIR /src
 COPY docker/alps/smtp-saves-sent.patch /tmp/smtp-saves-sent.patch
 RUN patch -p1 < /tmp/smtp-saves-sent.patch
+COPY docker/alps/account-picker.patch /tmp/account-picker.patch
+RUN patch -p1 < /tmp/account-picker.patch
+COPY internal/webmail /src/internal/mailarkywebmail
 ARG TARGETOS
 ARG TARGETARCH
 RUN --mount=type=cache,id=mailarky-go-mod,target=/go/pkg/mod \

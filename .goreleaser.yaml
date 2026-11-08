@@ -29,6 +29,7 @@ archives:
       - CONTRIBUTING.md
       - SECURITY.md
       - openapi.yaml
+      - internal/webmail/assets/logo.svg
       - docs/**/*
       - skills/**/*
       - testdata/tls/*

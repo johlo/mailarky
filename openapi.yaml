@@ -29,6 +29,20 @@ components:
                 - api_base
                 - limits
             type: object
+        WebmailLogin:
+            type: object
+            additionalProperties: false
+            description: Temporary credentials for a normal SMTP/IMAP login. The account password is unchanged. Expires after one hour or a Mailarky restart; deleting the account also prevents future authentication. Existing authenticated connections are not disconnected at expiry.
+            properties:
+                username:
+                    type: string
+                password:
+                    type: string
+                    description: Temporary account-scoped credential, returned only by this operation. Not the original account password.
+                expires_at:
+                    type: string
+                    format: date-time
+            required: [username, password, expires_at]
         AccountLimits:
             type: object
             additionalProperties: false
@@ -1173,6 +1187,42 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: Storage or service failure
             summary: Describe an account
+    /api/v1/accounts/{account}/webmail-login:
+        post:
+            operationId: post_api_v1_accounts_account_webmail_login
+            summary: Issue temporary credentials for webmail
+            description: Requires the same HTTP control API authorization as other account operations. Works for generated, persisted, and default accounts. Does not change the original password or configured OAuth tokens. Authentication still applies protocol faults and account limits and appears in command history.
+            parameters:
+                - in: path
+                  name: account
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "201":
+                    description: Temporary credentials created; response is not cacheable
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WebmailLogin'
+                "401":
+                    description: HTTP authentication required
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: Account not found
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: Could not create credentials
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
     /api/v1/accounts/{account}/oauth-tokens:
         put:
             operationId: put_api_v1_accounts_account_oauth_tokens

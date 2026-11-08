@@ -29,4 +29,4 @@ edge sb.service -> sb.db  "Reads and writes / \[bbolt]"  from: bottom  to: top  
 edge sb.service -> optional.hooks  "Posts webhooks \[HTTP]"  from: right  to: left  style: call
 
 node webmail "Alps / [tag]\[Optional container][/tag] / Browses and sends mail using account credentials" (wrap: 26)  below optional.hooks (gap: wide)  style: external
-edge webmail -> sb.service "Authenticates / \[IMAPS and SMTP STARTTLS]" from: left to: right style: call
+edge webmail -> sb.service "Selects and opens accounts / \[HTTP, IMAPS, SMTP STARTTLS]" from: left to: right style: call
