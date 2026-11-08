@@ -60,12 +60,28 @@ Paths below are relative to `/api/v1/accounts/{account}`.
 | POST | `/import` | Import an mbox file or Maildir tar; 200 summary |
 | GET | `/events` | WebSocket stream of `{"type":...,"data":...}` |
 | PUT | `/oauth-tokens` | Replace configured test tokens; `{"tokens":[...]}`; 204 |
+| POST | `/webmail-login` | Issue a temporary SMTP/IMAP credential; 201 |
 | GET | `/history` | Filtered, cursor-paginated SMTP/IMAP command summaries |
 | DELETE | `/history` | Clear command history; 204 |
 
 MIME header keys retain their original casing. Attachment metadata contains
 `part_id`, `filename`, `content_type`, `content_id`, and `size`. Payloads are
 decoded from raw MIME when requested. GET endpoints never mark messages read.
+
+### Webmail login
+
+`POST /webmail-login` takes no body and returns `username`, `password`, and
+`expires_at` (RFC3339). The password is a temporary credential for that account,
+valid for one hour for new SMTP/IMAP authentication. It does not replace the
+account's password or change its OAuth tokens. The same HTTP Basic authentication
+and webroot configuration apply as for other control API endpoints.
+
+Credentials are signed with an in-memory process key. Restarting Mailarky
+invalidates them, and deleting an account prevents further authentication.
+Expiry does not close already authenticated connections. The Alps account
+picker uses this endpoint server-side, then establishes a normal Alps session;
+it does not include the temporary password in its browser API responses.
+Protocol faults, limits, and command history still apply to webmail activity.
 
 ### Command history
 

@@ -1,0 +1,13 @@
+{
+  "name": "mailarky-browser-tests",
+  "private": true,
+  "scripts": {
+    "test:webmail": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

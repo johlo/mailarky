@@ -1,33 +1,26 @@
-# Mailarky
+# <img src="internal/webmail/assets/logo.svg" alt="" width="40" height="40"> Mailarky
 
-Mailarky is a programmable mail server for testing applications that send, read,
-or sync email. Give your application a mailbox full of messages, inspect what it
-sends, and make the server fail on demand to check how it recovers.
+**Test everything your application does with email, including what happens when things go wrong.**
 
-Use it to:
+Mailarky is an email server built for automated testing. Test how your application sends emails, receives messages, and synchronises mailboxes, without relying on external email providers.
 
-- **Test outgoing mail:** check recipients, subjects, message bodies, and
-  attachments in signup emails, receipts, or notifications.
-- **Test incoming-mail workflows:** seed a customer reply and verify that your
-  application imports it, updates a ticket, or sends a response.
-- **Test mailbox synchronization:** import an mbox or Maildir export to exercise
-  your application against real message history, folders, attachments, and read
-  flags.
-- **Test failure recovery:** reject a login, fail a send, impose a quota, or drop
-  an IMAP connection, then check retries and reconnection.
-- **Test rate-limit handling:** cap SMTP and IMAP commands per account, then
-  verify that your client paces its requests and backs off when overloaded.
-- **Assert client behaviour:** inspect command history to check retry counts,
-  backoff timing, connection reuse, and protocol replies.
+Create test inboxes, populate them with messages, inspect outgoing emails, and simulate problems such as failed logins, rejected messages, rate limits, and dropped connections.
 
-Your application connects over standard SMTP and IMAP using its normal mail
-libraries. Your tests use an HTTP API to create accounts, load messages,
-configure failures, and inspect the results. Inspection doesn’t change read
-flags or otherwise disturb the mailbox.
+### What can you test?
 
-Each test can have its own isolated account, so suites can run in parallel.
-Mailarky runs locally or in CI, and captured mail stays inside the test
-environment.
+1. **Outgoing email:** Verify recipients, content, and attachments.
+2. **Incoming email:** Simulate customer replies and verify how your application processes them.
+3. **Mailbox synchronisation:** Test against realistic inboxes with folders, flags, attachments, and imported email history.
+4. **Error handling and recovery:** Simulate failures and verify retries, reconnections, and rate limit handling.
+5. **Client behaviour:** Inspect SMTP and IMAP command history to verify exactly how your application interacts with the server.
+
+### Explore your test mailboxes
+
+Mailarky can launch the [Alps](https://github.com/migadu/alps) webmail client, allowing you to browse and inspect messages using a real email client.
+
+An account picker makes it easy to see all mail accounts created by your test suite and quickly switch between them. This is particularly useful when debugging integration tests or inspecting the results of a CI test run.
+
+**Run reliable, repeatable email integration tests locally or in CI.**
 
 > [!WARNING]
 > Mailarky is a test service. Its HTTP control API is unauthenticated by
@@ -69,7 +62,7 @@ test account's generated credentials. To inspect messages in a browser, use
 All published ports bind to loopback. Set `MAILARKY_SMTP_PORT`,
 `MAILARKY_IMAP_PORT`, and `MAILARKY_HTTP_PORT` to change them in the command
 above. See [configuration](docs/reference/configuration.md) for listener settings.
-Pin an image tag such as `ghcr.io/johlo/mailarky:v0.8.0` in CI;
+Pin an image tag such as `ghcr.io/johlo/mailarky:v0.9.0` in CI;
 `latest` follows stable releases. Stop and remove the container with
 `docker stop mailarky` and `docker rm mailarky`.
 
@@ -91,10 +84,17 @@ docker compose --profile webmail up -d --build --wait
 ```
 
 The first run builds both services, including a pinned Alps version. Open
-<http://localhost:8027> and log in with `user@example.test` / `local-imap-only`,
-or the `username` and `password` returned when you created a test account.
-Browse **Sent** for captured SMTP submissions and **INBOX** for incoming
-fixtures. Each login sees only that account's mail.
+<http://localhost:8027> to see the default account and accounts created by your
+tests. Search by name or username, then select **Open inbox** to sign in
+immediately. The list refreshes automatically; there is no need to copy a test
+account's password. Browse **Sent** for captured SMTP submissions and **INBOX**
+for incoming fixtures. Each login sees only that account's mail.
+
+Use **Profile options → Sign Out** in Alps to return to the account picker,
+or open <http://localhost:8027> to choose another account. The picker uses a
+temporary credential without changing the test's password. Password login is
+also available through **Sign in with a password**, using the credentials from
+account creation or `user@example.test` / `local-imap-only` for the default account.
 
 After the initial build, start the existing images without rebuilding:
 

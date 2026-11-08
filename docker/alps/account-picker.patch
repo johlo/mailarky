@@ -1,0 +1,45 @@
+--- a/cmd/alps/main.go
++++ b/cmd/alps/main.go
+@@ -19,6 +19,7 @@
+ 	"github.com/go-webauthn/webauthn/webauthn"
+ 	"github.com/migadu/alps"
+ 	"github.com/migadu/alps/cluster"
++	webmail "github.com/migadu/alps/internal/mailarkywebmail"
+ 	"github.com/migadu/alps/tlsmanager"
+ 	"golang.org/x/text/encoding/charmap"
+ 	_ "golang.org/x/text/encoding/japanese"
+@@ -257,9 +258,13 @@
+ 		idleTimeout = 120 * time.Second
+ 	}
+ 
++	handler, err := webmail.NewHandler(s, os.Getenv("MAILARKY_API_URL"))
++	if err != nil {
++		logger.Fatal(err)
++	}
+ 	httpServer := &http.Server{
+ 		Addr:         config.Server.Addr,
+-		Handler:      s,
++		Handler:      handler,
+ 		ReadTimeout:  readTimeout,
+ 		WriteTimeout: writeTimeout,
+ 		IdleTimeout:  idleTimeout,
+--- a/branding.go
++++ b/branding.go
+@@ -5,6 +5,7 @@
+ 	"fmt"
+ 	"html"
+ 	"io/fs"
++	"os"
+ 	"path"
+ 	"time"
+ )
+@@ -54,6 +55,9 @@
+ // configured theme from its first paint.
+ func brandedShell(index []byte, b BrandingOptions) ([]byte, error) {
+ 	var meta bytes.Buffer
++	if os.Getenv("MAILARKY_API_URL") != "" {
++		meta.WriteString("\n  <script src=\"/mailarky/alps.js\" defer></script>")
++	}
+ 	if b.DefaultTheme != "" {
+ 		fmt.Fprintf(&meta, "\n  <meta name=\"alps-default-theme\" content=\"%s\" />", html.EscapeString(b.DefaultTheme))
+ 	}

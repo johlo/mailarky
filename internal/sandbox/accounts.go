@@ -40,6 +40,7 @@ type Service struct {
 	recipients   map[string]string
 	serverFaults *faultRegistry
 	httpUsers    credentials
+	webmailKey   [32]byte
 	ctx          context.Context
 	cancel       context.CancelFunc
 	closed       bool
@@ -93,6 +94,10 @@ func openService(ctx context.Context, c configuration) (*Service, error) {
 		return nil, err
 	}
 	h.httpUsers = auth
+	if _, err := rand.Read(h.webmailKey[:]); err != nil {
+		cancel()
+		return nil, err
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(c.Password), bcrypt.MinCost)
 	if err != nil {
 		cancel()
@@ -387,7 +392,10 @@ func (h *Service) route(recipient string) *Account {
 }
 func (h *Service) authenticate(username, password string) *Account {
 	a := h.accountByUsername(username)
-	if a == nil || bcrypt.CompareHashAndPassword([]byte(a.identity.PasswordHash), []byte(password)) != nil {
+	if a == nil {
+		return nil
+	}
+	if !a.validWebmailPassword(password, time.Now()) && bcrypt.CompareHashAndPassword([]byte(a.identity.PasswordHash), []byte(password)) != nil {
 		return nil
 	}
 	select {

@@ -128,11 +128,37 @@ docker compose --profile webmail up -d --build --wait
 
 For later starts, use [the command without a build](#faster-repeated-starts).
 
-Open <http://localhost:8027>. Use `user@example.test` / `local-imap-only` or the
-credentials from account creation. Alps uses TLS IMAP and SMTP STARTTLS,
-trusts the bundled certificate, and authenticates both protocols with the
-logged-in account. Outgoing mail appears in that account's `Sent` folder.
-`MAILARKY_WEBMAIL_PORT` changes the browser port.
+Open <http://localhost:8027> to see accounts in this Mailarky instance, including
+the default account and accounts created by tests. Search by name or username
+and select **Open inbox** to sign in immediately. The list refreshes every five
+seconds while visible; **Refresh** also fetches it immediately. Keep the test
+account alive while inspecting it: deleting it removes its mail and ends its
+connections. Accounts on a different Mailarky instance do not appear here.
+
+Use **Profile options → Sign Out** in Alps to return automatically to the
+account picker. You can also open <http://localhost:8027> to switch accounts;
+selecting another account closes the browser's previous Alps session.
+**Sign in with a password** opens
+the usual Alps login at <http://localhost:8027/alps#/login>, where you can use
+the credentials from account creation or `user@example.test` / `local-imap-only`.
+
+Immediate login uses an account-scoped temporary credential, valid for one hour
+for new SMTP/IMAP authentication. It leaves the test's password and OAuth tokens
+unchanged. Restarting Mailarky invalidates these credentials; deleting an
+account prevents further login. Already authenticated connections can continue
+past credential expiry. If Alps needs to reconnect or send after expiry, return
+to the start page and choose the account again.
+
+Alps uses TLS IMAP and SMTP STARTTLS, trusts the bundled certificate, and
+authenticates both protocols with the selected account. Outgoing mail appears
+in that account's `Sent` folder. `MAILARKY_WEBMAIL_PORT` changes the browser port.
+
+The picker accesses the same control API as your tests. If you configured
+`MAILARKY_HTTP_AUTH`, enter those HTTP credentials when the browser prompts.
+For a custom API URL or `MAILARKY_WEBROOT`, set `MAILARKY_API_URL` in the webmail
+container's environment, including the prefix (for example,
+`http://mailarky:8026/mail`). This changes account discovery only; keep Alps'
+IMAP and SMTP servers pointed at the same Mailarky instance.
 
 Generated usernames work unchanged at login. For composing, Alps adds
 `@example.test` to usernames without a domain. Email-shaped usernames keep
@@ -155,7 +181,28 @@ python3 scripts/webmail_smoke.py
 ```
 
 Set `MAILARKY_HTTP_URL` and `MAILARKY_WEBMAIL_URL` when using different host ports.
-The smoke test creates and removes its own accounts and webmail sessions.
+The smoke test creates and removes its own accounts and webmail sessions. It
+checks password and picker login, account switching, isolated mailboxes,
+attachments, settings, drafts, and sending.
+
+Run the account picker browser tests against the same running profile with
+Node.js 20 or newer:
+
+```sh
+npm ci
+npx playwright install chromium
+npm run test:webmail
+```
+
+The Playwright suite covers desktop and mobile Chromium: account listing,
+search, live creation/deletion, immediate login, account isolation, sign-out
+back to the picker, password login, and error recovery. It creates and removes
+its own accounts and closes its browser contexts and sessions after each test.
+The same `MAILARKY_HTTP_URL` and `MAILARKY_WEBMAIL_URL` overrides apply. Use a
+local profile with the default unauthenticated control API. To watch a run,
+use `npm run test:webmail -- --project=chromium --headed`. Failure screenshots
+and traces are saved under `test-results/`. CI runs the suite after the smoke
+tests.
 
 ## Persist state
 
@@ -209,9 +256,13 @@ It applies [`smtp-saves-sent.patch`](../../docker/alps/smtp-saves-sent.patch)
 to support the `smtp_saves_sent` option in our
 [`config.toml`](../../docker/alps/config.toml): Mailarky already captures SMTP
 submissions, so Alps skips its extra IMAP copy while retaining draft cleanup.
-This does not enable global Message-ID deduplication. When updating the Alps
-commit, review the patch and run the webmail smoke test plus browser checks for
-login, reading, composing, attachments, folders, and settings.
+This does not enable global Message-ID deduplication.
+[`account-picker.patch`](../../docker/alps/account-picker.patch) wraps Alps'
+HTTP handler with the embedded start page and server-side login integration in
+[`internal/webmail`](../../internal/webmail). It also loads a small script that
+returns to the picker after Alps completes sign-out. When updating the Alps commit,
+review both patches and run the webmail smoke test plus browser checks for
+account selection, login, reading, composing, attachments, folders, and settings.
 
 The public protocol forks have their own module paths and CI. To update one,
 run `go get github.com/johlo/go-imap/v2@COMMIT` or

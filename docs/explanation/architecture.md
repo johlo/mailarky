@@ -26,6 +26,9 @@ notifications. Toxiproxy may sit in front of either mail listener for TCP faults
 The Go process defaults to memory storage. With persistence, each account uses
 its own bbolt file. Alps is an optional Compose profile with verified TLS
 IMAP and STARTTLS SMTP. It authenticates both using the logged-in account.
+Its start page lists accounts over the HTTP control API and requests a
+temporary credential for the selected account. The credential establishes a
+normal Alps session; the original test password is neither read nor changed.
 
 ## Components
 

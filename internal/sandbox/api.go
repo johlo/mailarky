@@ -56,6 +56,7 @@ func (a *httpAPI) handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/accounts", a.createAccount)
 	mux.HandleFunc("GET /api/v1/accounts/{account}", a.withAccount((*accountAPI).description))
 	mux.HandleFunc("DELETE /api/v1/accounts/{account}", a.deleteAccount)
+	mux.HandleFunc("POST /api/v1/accounts/{account}/webmail-login", a.withAccount((*accountAPI).webmailLogin))
 	mux.HandleFunc("PUT /api/v1/accounts/{account}/oauth-tokens", a.withAccount((*accountAPI).oauthTokens))
 	mux.HandleFunc("GET /api/v1/accounts/{account}/history", a.withAccount((*accountAPI).commandHistory))
 	mux.HandleFunc("DELETE /api/v1/accounts/{account}/history", a.withAccount((*accountAPI).commandHistory))
