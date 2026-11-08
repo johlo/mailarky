@@ -145,7 +145,32 @@ try:
             value = imap.response("METADATA")[1][0]
             expected = b'"saved-settings"' if account == first else b"NIL"
             assert expected in value, value
-    print("SMTP, HTTP, TLS IMAP, faults, import, METADATA isolation and UIDPLUS passed")
+    limited = api("POST", "/api/v1/accounts", {"limits": {
+        "smtp_commands": 3, "smtp_command_window": "1h",
+        "imap_commands": 2, "imap_command_window": "1h",
+    }})
+    accounts.append(limited)
+    with smtplib.SMTP(host, smtp_port, timeout=10) as smtp:
+        smtp.starttls(context=context)
+        smtp.login(limited["username"], limited["password"])
+        for _ in range(3):
+            assert smtp.noop()[0] == 250
+        code, reply = smtp.noop()
+        assert code == 451 and b"4.7.0" in reply, (code, reply)
+        assert smtp.rset()[0] == 250
+    with smtplib.SMTP(host, smtp_port, timeout=10) as smtp:
+        smtp.starttls(context=context)
+        smtp.login(limited["username"], limited["password"])
+        assert smtp.noop()[0] == 451  # Reconnecting must not reset the window.
+    with imaplib.IMAP4_SSL(host, imap_port, ssl_context=context, timeout=10) as imap:
+        imap.login(limited["username"], limited["password"])
+        for _ in range(2):
+            assert imap.noop()[0] == "OK"
+        status, reply = imap.noop()
+        assert status == "NO" and b"[LIMIT]" in reply[0], (status, reply)
+        for _ in range(3):
+            assert api("GET", limited["api_base"] + "/messages")["total"] == 0
+    print("SMTP, HTTP, TLS IMAP, faults, import, METADATA isolation, UIDPLUS and command rate limits passed")
 finally:
     for account in accounts:
         api("DELETE", "/api/v1/accounts/" + account["id"])

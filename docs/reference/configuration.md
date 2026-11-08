@@ -109,6 +109,10 @@ retention policies that delete old messages; they do not enforce quotas.
 | `MAILARKY_SMTP_MAX_RECIPIENTS` | `--smtp-max-recipients` | `smtp_max_recipients` | `1000` |
 | `MAILARKY_ACCOUNT_SMTP_CONNECTIONS` | `--account-smtp-connections` | `account_limits.smtp_connections` | `0` |
 | `MAILARKY_ACCOUNT_IMAP_CONNECTIONS` | `--account-imap-connections` | `account_limits.imap_connections` | `0` |
+| `MAILARKY_ACCOUNT_SMTP_COMMANDS` | `--account-smtp-commands` | `account_limits.smtp_commands` | `0` |
+| `MAILARKY_ACCOUNT_SMTP_COMMAND_WINDOW` | `--account-smtp-command-window` | `account_limits.smtp_command_window` | empty |
+| `MAILARKY_ACCOUNT_IMAP_COMMANDS` | `--account-imap-commands` | `account_limits.imap_commands` | `0` |
+| `MAILARKY_ACCOUNT_IMAP_COMMAND_WINDOW` | `--account-imap-command-window` | `account_limits.imap_command_window` | empty |
 | `MAILARKY_ACCOUNT_SEND_MESSAGES` | `--account-send-messages` | `account_limits.send_messages` | `0` |
 | `MAILARKY_ACCOUNT_SEND_WINDOW` | `--account-send-window` | `account_limits.send_window` | empty |
 | `MAILARKY_ACCOUNT_QUOTA_MESSAGES` | `--account-quota-messages` | `account_limits.quota_messages` | `0` |
@@ -120,13 +124,15 @@ created accounts. `POST /api/v1/accounts` can supply a `limits` object that
 replaces the entire set of account defaults; omitted fields in that object
 are unlimited. `{ "limits": {} }` creates an unlimited account. Limits on
 runtime accounts are immutable and persisted with their account metadata.
-Connection counts and sending windows reset on restart.
+Connection counts, sending windows, and command windows reset on restart.
 
 | Limit | Scope and response |
 | --- | --- |
 | `smtp_max_recipients` | Accepted recipients per transaction across all accounts; extra RCPT gets `452 4.5.3`. Previously accepted recipients can still receive DATA. EHLO advertises `LIMITS RCPTMAX`. |
 | `smtp_connections` | Authenticated sessions for one account; excess AUTH gets `454 4.7.0`. Anonymous sessions are not counted. |
 | `imap_connections` | Authenticated sessions for one account, including IDLE; excess LOGIN/AUTHENTICATE gets `NO [LIMIT]`. |
+| `smtp_commands` / `smtp_command_window` | Commands after SMTP authentication per account in a fixed window; excess commands get `451 4.7.0` before execution. RSET and QUIT are exempt. |
+| `imap_commands` / `imap_command_window` | Commands after IMAP authentication per account in a fixed window; excess commands get tagged `NO [LIMIT]` before execution. LOGOUT is exempt. |
 | `send_messages` / `send_window` | Successful authenticated SMTP submissions per account in a fixed window starting with the first admission. Excess DATA/BDAT LAST gets `451 4.7.0`. A nonzero count requires a positive Go duration such as `1s` or `1m`. |
 | `quota_messages` / `quota_bytes` | Total stored messages / raw MIME bytes across all folders. SMTP gets `452 4.2.2`; IMAP APPEND/COPY gets `NO [OVERQUOTA]`; HTTP seeding gets `507` with a JSON error. |
 
@@ -140,6 +146,27 @@ duplicate submissions count even if duplicate Message-ID suppression avoids
 another stored copy. HTTP seeding and IMAP APPEND/COPY do not consume SMTP
 sending capacity. Fixed windows can admit
 bursts around a window boundary; this is not a sliding-window limiter.
+
+Command windows are independent for SMTP and IMAP, and shared atomically across
+all authenticated connections for the account. Each nonzero command count
+requires its corresponding positive duration. A window starts with the first
+admitted command; attempts rejected by the limiter do not extend it. Reconnecting
+does not reset it. Once the window expires, the next command starts a new one,
+including on an existing connection.
+
+Commands admitted by the limiter consume capacity even if normal validation or
+a fault subsequently rejects them. Rate checks run before fault rules, so a
+rate-limited command does not consume a fault hit or sequence step. Each SMTP
+BDAT chunk counts as one command. IMAP commands reaching the command hook,
+including UID commands and entry into IDLE, count once; IDLE notifications and
+DONE do not count. SMTP RSET/QUIT and IMAP LOGOUT consume no command capacity.
+Their normal validation and fault rules still apply.
+
+Authentication and commands before authentication are outside these per-account
+command limits. Anonymous SMTP does not consume a recipient account's command
+capacity. HTTP endpoints are not rate-limited and HTTP requests do not consume
+either protocol's allowance. Command limits default to unlimited and are
+separate from the successful-submission limit (`send_messages`).
 
 Quota checks include copies and happen before retention. A full account never
 evicts fixtures to fit an attempted insertion. Deletion/expunge frees quota;

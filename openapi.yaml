@@ -42,6 +42,22 @@ components:
                     type: integer
                     minimum: 0
                     default: 0
+                smtp_commands:
+                    type: integer
+                    minimum: 0
+                    default: 0
+                    description: Commands after SMTP authentication per smtp_command_window, shared across account sessions. RSET and QUIT are exempt. Excess commands receive 451 4.7.0 before execution. HTTP requests do not count.
+                smtp_command_window:
+                    type: string
+                    description: Positive Go duration, e.g. 1s; required if smtp_commands is nonzero. Fixed window starts with the first admitted command; reconnecting does not reset it.
+                imap_commands:
+                    type: integer
+                    minimum: 0
+                    default: 0
+                    description: Commands after IMAP authentication per imap_command_window, shared across account sessions. LOGOUT is exempt. Excess commands receive NO [LIMIT] before execution. HTTP requests do not count.
+                imap_command_window:
+                    type: string
+                    description: Positive Go duration, e.g. 1s; required if imap_commands is nonzero. Fixed window starts with the first admitted command; reconnecting does not reset it.
                 send_messages:
                     type: integer
                     minimum: 0

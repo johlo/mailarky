@@ -61,6 +61,7 @@ type Account struct {
 	oauthTokens                                        []oauthToken
 	smtpConnections, imapConnections, sentInWindow     int
 	sendWindow                                         time.Time
+	smtpCommandWindow, imapCommandWindow               commandWindow
 	accepted, rejected, ignored, deleted, acceptedSize atomic.Uint64
 }
 type mailboxCreation struct {

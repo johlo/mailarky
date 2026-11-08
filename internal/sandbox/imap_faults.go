@@ -58,6 +58,9 @@ func newIMAPServer(service *Service) *imapserver.Server {
 	}
 	options.CommandHook = func(c *imapserver.Conn, cmd *imapserver.Command) error {
 		s := c.Session().(*imapSession)
+		if s.account != nil && cmd.Name != "LOGOUT" && !s.account.allowCommand("imap", time.Now()) {
+			return &imap.Error{Type: imap.StatusResponseTypeNo, Code: imap.ResponseCodeLimit, Text: "Account IMAP command rate limit exceeded; retry later"}
+		}
 		e := imapEvent(c, cmd, "before")
 		cmd.HookData = e
 		if cmd.Name == "IDLE" && s.selected == nil {
