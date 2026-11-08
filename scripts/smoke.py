@@ -170,7 +170,18 @@ try:
         assert status == "NO" and b"[LIMIT]" in reply[0], (status, reply)
         for _ in range(3):
             assert api("GET", limited["api_base"] + "/messages")["total"] == 0
-    print("SMTP, HTTP, TLS IMAP, faults, import, METADATA isolation, UIDPLUS and command rate limits passed")
+    history = api("GET", limited["api_base"] + "/history?protocol=smtp&command=NOOP")
+    commands = history["commands"]
+    assert len(commands) == 5 and history["dropped"] == 0 and not history["has_more"], history
+    assert [entry["response"] for entry in commands] == ["250 2.0.0"] * 3 + ["451 4.7.0"] * 2
+    assert commands[0]["connection_id"] == commands[3]["connection_id"]
+    assert commands[3]["connection_id"] != commands[4]["connection_id"]
+    history = api("GET", limited["api_base"] + "/history?protocol=imap&command=NOOP")
+    assert [entry["response"] for entry in history["commands"]] == ["OK", "OK", "NO [LIMIT]"]
+    assert limited["password"] not in json.dumps(api("GET", limited["api_base"] + "/history"))
+    api("DELETE", limited["api_base"] + "/history")
+    assert api("GET", limited["api_base"] + "/history")["commands"] == []
+    print("SMTP, HTTP, TLS IMAP, faults, import, METADATA isolation, UIDPLUS, command rate limits and history passed")
 finally:
     for account in accounts:
         api("DELETE", "/api/v1/accounts/" + account["id"])

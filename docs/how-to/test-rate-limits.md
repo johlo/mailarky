@@ -121,8 +121,10 @@ PY
 
 Use the same checks around your application's send or sync operation to verify
 its retry behavior. The example's fixed wait checks server recovery; assert your
-client's own backoff policy separately. For an account created manually, clean
-up with `DELETE /api/v1/accounts/ACCOUNT_ID` after the test.
+client's own backoff policy using [command history](inspect-client-behavior.md).
+Compare each retry's `started_at` with the previous rejection's `completed_at`,
+and group by `connection_id` when checking reconnections. For an account created
+manually, clean up with `DELETE /api/v1/accounts/ACCOUNT_ID` after the test.
 
 For limits on successful SMTP submissions, use `send_messages` and `send_window`.
 For simultaneous sessions, use `smtp_connections` and `imap_connections`.

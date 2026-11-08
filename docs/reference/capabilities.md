@@ -12,7 +12,7 @@
 | Enforced limits | SMTP recipients per transaction; per-account authenticated connections, successful SMTP submission windows, message and byte quotas |
 | Test OAuth | Account-specific XOAUTH2 tokens for SMTP/IMAP, valid/expired/rejected states, expiry and rotation; no provider HTTP OAuth service |
 | State | Memory or bbolt; immutable raw MIME; stable persisted UID identity; opt-in per-account retention |
-| Observability | Account WebSocket events, asynchronous webhooks, optional Prometheus metrics |
+| Observability | Bounded per-account SMTP/IMAP command history with timing, connection IDs, and response codes; WebSocket events, asynchronous webhooks, optional Prometheus metrics |
 | Webmail | Optional Roundcube Compose profile using authenticated SMTP and TLS IMAP |
 
 The service has no mail relay, forwarding, POP3, built-in webmail, tags, HTML

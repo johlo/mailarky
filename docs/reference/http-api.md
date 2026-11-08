@@ -60,10 +60,86 @@ Paths below are relative to `/api/v1/accounts/{account}`.
 | POST | `/import` | Import an mbox file or Maildir tar; 200 summary |
 | GET | `/events` | WebSocket stream of `{"type":...,"data":...}` |
 | PUT | `/oauth-tokens` | Replace configured test tokens; `{"tokens":[...]}`; 204 |
+| GET | `/history` | Filtered, cursor-paginated SMTP/IMAP command summaries |
+| DELETE | `/history` | Clear command history; 204 |
 
 MIME header keys retain their original casing. Attachment metadata contains
 `part_id`, `filename`, `content_type`, `content_id`, and `size`. Payloads are
 decoded from raw MIME when requested. GET endpoints never mark messages read.
+
+### Command history
+
+`GET /history` returns completed commands in completion order. History is
+enabled for every account, retains its last 1,000 entries in memory, and is
+lost on restart or account deletion. HTTP operations never create entries.
+
+```json
+{
+  "commands": [{
+    "id": 12,
+    "protocol": "imap",
+    "connection_id": "df06f893-f603-4e83-8c75-615636bd721e",
+    "command": "UID FETCH",
+    "started_at": "2026-11-08T12:00:00.000Z",
+    "completed_at": "2026-11-08T12:00:00.002Z",
+    "duration_ms": 2,
+    "outcome": "response",
+    "response": "NO [LIMIT]",
+    "connection_closed": false,
+    "mailbox": "INBOX"
+  }],
+  "next_after": 12,
+  "has_more": false,
+  "dropped": 0,
+  "capacity": 1000
+}
+```
+
+| Query parameter | Meaning |
+| --- | --- |
+| `protocol` | `smtp` or `imap`; omit for both |
+| `command` | Exact command name, case-insensitive; UID commands use names such as `UID FETCH` |
+| `connection_id` | Exact connection ID |
+| `after` | Return IDs greater than this cursor; defaults to `0` |
+| `limit` | Page size, 1–1,000; defaults to `100` |
+
+Filters are conjunctive. Pass `next_after` as `after` on the next page or poll,
+keeping the same filters. `has_more` indicates further matching entries in the
+current snapshot. When no matches remain, `next_after` advances past all
+completed entries inspected, including nonmatches. IDs are account-local and
+assigned on completion, so a long command cannot be missed by a polling cursor.
+Use `started_at` to compare request timing across concurrent connections.
+
+`dropped` counts entries evicted by the capacity limit since the last clear.
+Check it before asserting a complete count; a positive value means the retained
+history may be incomplete for the scenario. Clearing preserves increasing IDs,
+resets `dropped`, and discards later completions of commands started before the
+clear. It does not reset rate limits, fault counters, or connections.
+
+An entry's `outcome` is `response`, `disconnect`, or `raw` (an injected raw
+reply). `response` contains SMTP numeric/enhanced codes or IMAP status and an
+optional response-code atom. It is empty for silent disconnects and raw replies.
+Injected rejections replace the normal result in history; losing a DATA
+acknowledgement records a disconnect even though storage may have succeeded.
+`connection_closed` marks logout and disconnect outcomes. Optional `mailbox`
+and `recipient` give IMAP mailbox context and a parsed SMTP RCPT recipient,
+respectively; each is truncated to 256 bytes.
+
+`started_at` is captured when a parsed command reaches its protocol hook;
+`completed_at` and `duration_ms` include subsequent processing and fault delays.
+SASL challenges and DATA continuations are not separate entries. Each BDAT
+chunk is a command; IDLE completes on DONE or disconnection, and its unsolicited
+notifications are not commands. History records the server's final response
+selection, not proof that the client received it.
+
+History covers commands on authenticated connections, including rate-limit
+rejections, and authentication attempts once an existing account is identified.
+It excludes anonymous SMTP, greetings, TLS negotiation before account identity,
+unknown-account login attempts, and commands rejected before reaching a command
+hook. Passwords, OAuth tokens, SASL payloads, message literals, arbitrary command
+arguments, and free-form reply text are never retained. Unknown SMTP command
+names are summarized as `UNKNOWN`. Raw fault replies are not parsed or retained.
+The normal HTTP authentication and webroot settings protect both history routes.
 
 ### Test OAuth tokens
 

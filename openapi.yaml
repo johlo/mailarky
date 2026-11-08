@@ -75,6 +75,75 @@ components:
                     format: int64
                     minimum: 0
                     default: 0
+        CommandHistoryEntry:
+            type: object
+            additionalProperties: false
+            required: [id, protocol, connection_id, command, started_at, completed_at, duration_ms, outcome, response, connection_closed]
+            properties:
+                id:
+                    type: integer
+                    minimum: 1
+                    description: Account-local sequence assigned on completion; does not reset when history is cleared.
+                protocol:
+                    type: string
+                    enum: [smtp, imap]
+                connection_id:
+                    type: string
+                    format: uuid
+                command:
+                    type: string
+                    description: Uppercase command name, including UID prefixes. Unknown SMTP commands are summarized as UNKNOWN; arbitrary arguments are omitted.
+                started_at:
+                    type: string
+                    format: date-time
+                    description: UTC timestamp when the parsed command reached the command hook.
+                completed_at:
+                    type: string
+                    format: date-time
+                duration_ms:
+                    type: number
+                    minimum: 0
+                outcome:
+                    type: string
+                    enum: [response, disconnect, raw]
+                response:
+                    type: string
+                    description: SMTP numeric and enhanced codes, or IMAP status and response-code atom. Empty for silent disconnects or raw injected replies. Free-form reply text is never retained.
+                    example: "451 4.7.0"
+                connection_closed:
+                    type: boolean
+                    description: Command ends the connection through logout, a disconnect, or a raw close action.
+                mailbox:
+                    type: string
+                    maxLength: 256
+                    description: IMAP mailbox context when available, truncated to 256 bytes.
+                recipient:
+                    type: string
+                    maxLength: 256
+                    description: Parsed SMTP RCPT recipient when available, truncated to 256 bytes.
+        CommandHistoryPage:
+            type: object
+            additionalProperties: false
+            required: [commands, next_after, has_more, dropped, capacity]
+            properties:
+                commands:
+                    type: array
+                    maxItems: 1000
+                    items:
+                        $ref: '#/components/schemas/CommandHistoryEntry'
+                next_after:
+                    type: integer
+                    minimum: 0
+                    description: Cursor for the next page or poll using the same filters. Completion order, not command start order.
+                has_more:
+                    type: boolean
+                dropped:
+                    type: integer
+                    minimum: 0
+                    description: Entries evicted by capacity since the last clear. Check this before asserting complete command counts.
+                capacity:
+                    type: integer
+                    enum: [1000]
         OAuthToken:
             type: object
             additionalProperties: false
@@ -1156,6 +1225,79 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
+    /api/v1/accounts/{account}/history:
+        get:
+            operationId: get_api_v1_accounts_account_history
+            summary: Inspect account SMTP and IMAP command history
+            description: Last 1000 completed command summaries in completion order, held in memory. Captures authenticated commands and authentication attempts once an existing account is identified. Anonymous SMTP, greetings, syntax errors before command hooks, and HTTP traffic are excluded. Passwords, tokens, raw arguments, message content, and free-form replies are never retained. Raw injected replies have outcome raw and an empty response; this is not a wire transcript or proof a client received a reply.
+            parameters:
+                - in: path
+                  name: account
+                  required: true
+                  schema:
+                    type: string
+                - in: query
+                  name: protocol
+                  schema:
+                    type: string
+                    enum: [smtp, imap]
+                - in: query
+                  name: command
+                  schema:
+                    type: string
+                  description: Exact command name, case-insensitive; use UID FETCH for UID commands.
+                - in: query
+                  name: connection_id
+                  schema:
+                    type: string
+                - in: query
+                  name: after
+                  schema:
+                    type: integer
+                    minimum: 0
+                    default: 0
+                  description: Return entries with an ID strictly greater than this cursor.
+                - in: query
+                  name: limit
+                  schema:
+                    type: integer
+                    minimum: 1
+                    maximum: 1000
+                    default: 100
+            responses:
+                "200":
+                    description: Command summaries and pagination metadata
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CommandHistoryPage'
+                "400":
+                    description: Invalid filter or pagination
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: HTTP authentication required
+                "404":
+                    description: Account not found
+        delete:
+            operationId: delete_api_v1_accounts_account_history
+            summary: Clear account command history
+            description: Clears retained entries and the dropped count, and discards completions for commands started before the clear. IDs remain monotonic. Does not reset limits, fault counters, or connections.
+            parameters:
+                - in: path
+                  name: account
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "204":
+                    description: History cleared
+                "401":
+                    description: HTTP authentication required
+                "404":
+                    description: Account not found
     /api/v1/accounts/{account}/events:
         get:
             description: WebSocket messages follow the Event schema. A bounded subscriber queue disconnects slow consumers.

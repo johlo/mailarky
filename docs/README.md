@@ -12,6 +12,7 @@
 - [Import a mailbox export](how-to/import-mailbox-export.md)
 - [Inject SMTP and IMAP failures](how-to/fault-injection.md)
 - [Test rate limits and client backoff](how-to/test-rate-limits.md)
+- [Assert client behaviour with command history](how-to/inspect-client-behavior.md)
 - [Run, browse, and test](how-to/run-and-test.md)
 - [Troubleshoot](how-to/troubleshoot.md)
 - [Use with coding agents](../skills/mailarky/SKILL.md)

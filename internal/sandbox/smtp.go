@@ -74,13 +74,15 @@ type smtpSession struct {
 	authenticated *Account
 	deliveries    []*smtpDelivery
 	completed     *storedMessage
+	recorder      *commandRecorder
 }
 
 func (b *smtpBackend) NewSession(c *smtp.Conn) (smtp.Session, error) {
-	return &smtpSession{backend: b, conn: c}, nil
+	return &smtpSession{backend: b, conn: c, recorder: newCommandRecorder()}, nil
 }
 func (s *smtpSession) Reset() { s.from = ""; s.recipients = nil; s.deliveries = nil; s.completed = nil }
 func (s *smtpSession) Logout() error {
+	s.recorder.finish("disconnect", "", true)
 	s.authMu.Lock()
 	defer s.authMu.Unlock()
 	if s.closed {
@@ -207,6 +209,7 @@ func (s *smtpSession) Rcpt(to string, _ *smtp.RcptOptions) error {
 	if !validEnvelope(to, false) {
 		return &smtp.SMTPError{Code: 501, Message: "Invalid envelope recipient"}
 	}
+	s.recorder.details("", to)
 	account := s.authenticated
 	if account == nil {
 		account = s.backend.service.route(to)
