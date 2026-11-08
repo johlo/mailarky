@@ -8,6 +8,8 @@
 | TLS verification fails | Trust `testdata/tls/server.crt` and connect as localhost, 127.0.0.1, or mailarky. |
 | A fault has zero hits | Check its registry, protocol, exact command including UID prefix, phase, and filters. MAIL account rules require SMTP AUTH. |
 | A retry still fails | Inspect `hits`, `max_hits`, `enabled`, probability, expiry, and other rules in the same registry. |
+| SMTP returns `451 4.7.0` or IMAP returns `NO [LIMIT]` without a fault rule | Inspect the account's `limits`. Command rates are shared across authenticated connections; back off until the window expires. SMTP submission limits and IMAP connection limits can also use these codes. See [rate-limit testing](test-rate-limits.md). |
+| Reconnecting does not clear a rate limit | Windows belong to the account, not the connection. Wait for expiry or create a fresh account for a new scenario. |
 | A body fetch changed read state | BODY sets `\Seen`; use BODY.PEEK or EXAMINE for observational reads. HTTP GET is observational. |
 | A selected client sees pending deletion later | Non-UID FETCH, STORE, and SEARCH defer EXPUNGE. NOOP, UID commands, or IDLE flush updates. |
 | Seeded history disappears | Check opt-in retention limits; they span all folders within an account. Defaults are unlimited. |

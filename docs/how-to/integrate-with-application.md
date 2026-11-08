@@ -31,6 +31,14 @@ When running the binary outside Compose, enable STARTTLS with
 `MAILARKY_SMTP_TLS_MODE=starttls`, or explicitly allow local plaintext AUTH
 with `MAILARKY_SMTP_AUTH_ALLOW_INSECURE=true`. IMAP always uses implicit TLS.
 
+## Test request pacing and overload recovery
+
+Give the application's account separate SMTP and IMAP command allowances,
+then verify that its send and sync clients back off on SMTP `451 4.7.0` or
+IMAP `NO [LIMIT]`. Connections share an account's allowance across reconnects;
+HTTP setup and inspection remain available. Follow
+[test rate limits and client backoff](test-rate-limits.md) for a complete example.
+
 ## Test OAuth authentication
 
 Configure local test tokens when creating the application's account:
