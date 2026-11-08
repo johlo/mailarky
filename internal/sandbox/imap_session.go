@@ -17,11 +17,13 @@ type imapSession struct {
 	account      *Account
 	selected     *mailbox
 	pendingFault *faultRule
+	recorder     *commandRecorder
 }
 
 var _ imapserver.Session = (*imapSession)(nil)
 
 func (s *imapSession) Close() error {
+	s.recorder.finish("disconnect", "", true)
 	s.selected = nil
 	if s.account != nil {
 		s.account.releaseConnection("imap")
@@ -44,6 +46,7 @@ func (s *imapSession) authenticationFault(username string) error {
 	e := imapEvent(s.conn, cmd, "before")
 	e.username, e.identityOnly = username, true
 	account := s.service.accountByUsername(username)
+	s.recorder.attach(account)
 	return s.apply(cmd, e, account)
 }
 func (s *imapSession) bindAccount(account *Account) error {

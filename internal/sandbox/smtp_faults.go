@@ -16,6 +16,7 @@ func applySMTPFault(c *smtp.Conn, service *Service, t faultRule) error {
 	switch a := t.Action.Parameters.(type) {
 	case *delayAction:
 		if err := waitFault(service.ctx, service.ctx.Done(), a.DelayMS); err != nil {
+			smtpRecorder(c).finish("disconnect", "", true)
 			return c.Disconnect(nil)
 		}
 		return nil
@@ -26,8 +27,10 @@ func applySMTPFault(c *smtp.Conn, service *Service, t faultRule) error {
 		}
 		reply := &smtp.Reply{Code: a.Code, EnhancedCode: enhanced, Lines: []string{faultMessage(t.Name, a.Message)}}
 		if a.Code == 421 || c.Command() == "" {
+			recordSMTPReply(c, reply, true)
 			return c.Disconnect(reply)
 		}
+		recordSMTPReply(c, reply, false)
 		c.WriteReply(reply)
 		return smtp.ErrResponseHandled
 	case *disconnectAction:
@@ -35,9 +38,15 @@ func applySMTPFault(c *smtp.Conn, service *Service, t faultRule) error {
 		if !a.Silent {
 			reply = &smtp.Reply{Code: 421, EnhancedCode: smtp.EnhancedCode{4, 3, 2}, Lines: []string{faultMessage(t.Name, a.Message)}}
 		}
+		if reply != nil {
+			recordSMTPReply(c, reply, true)
+		} else {
+			smtpRecorder(c).finish("disconnect", "", true)
+		}
 		return c.Disconnect(reply)
 	case *responseAction:
 		err := c.WriteRaw(wireResponse(a.Response, ""))
+		smtpRecorder(c).finish("raw", "", err != nil || a.Close || c.Command() == "")
 		if err != nil || a.Close || c.Command() == "" {
 			return c.Disconnect(nil)
 		}
@@ -74,9 +83,11 @@ func (s *smtpSession) faults(command, phase string, account *Account, message *s
 	return nil
 }
 func (s *smtpSession) authenticationFault(username string) error {
+	account := s.backend.service.accountByUsername(username)
+	s.recorder.attach(account)
 	e := protocolEvent{protocol: "smtp", command: "AUTH", phase: "before", username: username, identityOnly: true}
 	rules := s.backend.service.serverFaults.claim(e, false)
-	if account := s.backend.service.accountByUsername(username); account != nil {
+	if account != nil {
 		e.identityOnly = false
 		rules = append(rules, account.faults.claim(e, false)...)
 	}
@@ -138,9 +149,10 @@ func (b *smtpBackend) installFaultHooks(srv *smtp.Server) {
 		return b.hookFaults(c, "CONNECT", "before", smtpCommandContext{})
 	}
 	srv.CommandHook = func(c *smtp.Conn, command, arg string) error {
-		// Keep transaction cleanup and logout available even when overloaded.
-		if session, ok := c.Session().(*smtpSession); ok && session.authenticated != nil && command != "QUIT" && command != "RSET" {
-			if !session.authenticated.allowCommand("smtp", time.Now()) {
+		if session, ok := c.Session().(*smtpSession); ok {
+			session.recorder.start("smtp", command, session.authenticated)
+			// Keep transaction cleanup and logout available even when overloaded.
+			if session.authenticated != nil && command != "QUIT" && command != "RSET" && !session.authenticated.allowCommand("smtp", time.Now()) {
 				return &smtp.SMTPError{Code: 451, EnhancedCode: smtp.EnhancedCode{4, 7, 0}, Message: "Account SMTP command rate limit exceeded; retry later"}
 			}
 		}
@@ -156,7 +168,8 @@ func (b *smtpBackend) installFaultHooks(srv *smtp.Server) {
 		}
 		return b.hookFaults(c, command, "before", ctx)
 	}
-	srv.ResponseHook = func(c *smtp.Conn, reply *smtp.Reply) *smtp.Reply {
+	srv.ResponseHook = func(c *smtp.Conn, reply *smtp.Reply) (result *smtp.Reply) {
+		defer func() { recordSMTPReply(c, result, false) }()
 		var injected *smtpInjectedError
 		if errors.As(reply.Err, &injected) {
 			if err := applySMTPFault(c, b.service, injected.rule); err != nil {

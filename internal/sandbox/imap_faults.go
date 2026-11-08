@@ -32,7 +32,7 @@ func newIMAPServer(service *Service) *imapserver.Server {
 	options := &imapserver.Options{
 		Caps: imap.CapSet{imap.CapIMAP4rev1: {}, imap.CapMetadata: {}, imap.CapUIDPlus: {}},
 		NewSession: func(c *imapserver.Conn) (imapserver.Session, *imapserver.GreetingData, error) {
-			return &imapSession{service: service, conn: c}, nil, nil
+			return &imapSession{service: service, conn: c, recorder: newCommandRecorder()}, nil, nil
 		},
 	}
 	options.GreetingHook = func(c *imapserver.Conn) error {
@@ -58,18 +58,21 @@ func newIMAPServer(service *Service) *imapserver.Server {
 	}
 	options.CommandHook = func(c *imapserver.Conn, cmd *imapserver.Command) error {
 		s := c.Session().(*imapSession)
+		e := imapEvent(c, cmd, "before")
+		s.recorder.start("imap", cmd.Name, s.account)
+		s.recorder.details(e.folder, "")
 		if s.account != nil && cmd.Name != "LOGOUT" && !s.account.allowCommand("imap", time.Now()) {
 			return &imap.Error{Type: imap.StatusResponseTypeNo, Code: imap.ResponseCodeLimit, Text: "Account IMAP command rate limit exceeded; retry later"}
 		}
-		e := imapEvent(c, cmd, "before")
 		cmd.HookData = e
 		if cmd.Name == "IDLE" && s.selected == nil {
 			return imapNo(errors.New("select a mailbox before IDLE"))
 		}
 		return s.apply(cmd, e, s.account)
 	}
-	options.ResponseHook = func(c *imapserver.Conn, cmd *imapserver.Command, res *imap.StatusResponse) *imap.StatusResponse {
+	options.ResponseHook = func(c *imapserver.Conn, cmd *imapserver.Command, res *imap.StatusResponse) (result *imap.StatusResponse) {
 		s := c.Session().(*imapSession)
+		defer func() { s.recordReply(result) }()
 		if fault := s.pendingFault; fault != nil {
 			s.pendingFault = nil
 			folder := ""
@@ -150,6 +153,13 @@ func wireResponse(response, tag string) string {
 	return response
 }
 func imapDisconnect(c *imapserver.Conn, message string, silent bool) error {
+	response := ""
+	if !silent {
+		response = "BYE"
+	}
+	if s, ok := c.Session().(*imapSession); ok {
+		s.recorder.finish("disconnect", response, true)
+	}
 	if !silent {
 		_ = c.Bye(message)
 	} else {
@@ -171,8 +181,11 @@ func applyIMAPFault(c *imapserver.Conn, cmd *imapserver.Command, service *Servic
 		return imapDisconnect(c, faultMessage(rule.Name, a.Message), a.Silent)
 	case *responseAction:
 		if err := c.WriteRawResponse(wireResponse(a.Response, cmd.Tag)); err != nil {
+			c.Session().(*imapSession).recorder.finish("disconnect", "", true)
+			_ = c.Close()
 			return err
 		}
+		c.Session().(*imapSession).recorder.finish("raw", "", a.Close || cmd.Name == "CONNECT")
 		if a.Close || cmd.Name == "CONNECT" {
 			_ = c.Close()
 		}

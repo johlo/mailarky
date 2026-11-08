@@ -53,6 +53,7 @@ type Account struct {
 	user                                               *mailboxUser
 	faults                                             *faultRegistry
 	notifier                                           *eventHub
+	history                                            commandHistory
 	stop                                               func()
 	afterAppend                                        func(*storedMessage)
 	started                                            time.Time

@@ -17,6 +17,8 @@ Use it to:
   an IMAP connection, then check retries and reconnection.
 - **Test rate-limit handling:** cap SMTP and IMAP commands per account, then
   verify that your client paces its requests and backs off when overloaded.
+- **Assert client behaviour:** inspect command history to check retry counts,
+  backoff timing, connection reuse, and protocol replies.
 
 Your application connects over standard SMTP and IMAP using its normal mail
 libraries. Your tests use an HTTP API to create accounts, load messages,
@@ -67,7 +69,7 @@ test account's generated credentials. For optional Roundcube webmail on port
 All published ports bind to loopback. Set `MAILARKY_SMTP_PORT`,
 `MAILARKY_IMAP_PORT`, and `MAILARKY_HTTP_PORT` to change them in the command
 above. See [configuration](docs/reference/configuration.md) for listener settings.
-Pin an image tag such as `ghcr.io/johlo/mailarky:v0.6.0` in CI;
+Pin an image tag such as `ghcr.io/johlo/mailarky:v0.7.0` in CI;
 `latest` follows stable releases. Stop and remove the container with
 `docker stop mailarky` and `docker rm mailarky`.
 
@@ -159,6 +161,26 @@ authentication.
 Use the [rate-limit testing guide](docs/how-to/test-rate-limits.md) for a runnable
 SMTP/IMAP example and checks for pacing, backoff, and concurrent connections.
 
+## Inspect command history
+
+Each account keeps its last 1,000 completed SMTP/IMAP commands in memory,
+including timestamps, connection IDs, and response codes. Read the history to
+assert what your client did after a rate limit or injected failure:
+
+```sh
+curl -fsS 'http://localhost:8026/api/v1/accounts/ACCOUNT_ID/history?protocol=imap&command=NOOP'
+
+# Clear history before the next scenario; limits and fault counters stay intact.
+curl -fsS -X DELETE http://localhost:8026/api/v1/accounts/ACCOUNT_ID/history
+```
+
+Commands on authenticated connections and authentication attempts identifying
+an existing account are recorded. Credentials, message contents, and free-form
+replies are omitted. Filter by protocol, command, or connection, and use cursors
+to read successive pages. See [assert client behaviour](docs/how-to/inspect-client-behavior.md)
+for retry assertions and [history reference](docs/reference/http-api.md#command-history)
+for fields, retention, and coverage.
+
 ## Enforced limits
 
 Limits reject excess work the way a provider would, without any fault rules:
@@ -209,6 +231,7 @@ Release archives include the skill for that version.
 | Seed history or raw MIME | [Fixtures](docs/how-to/seed-test-scenarios.md) |
 | Load an exported mailbox | [Import](docs/how-to/import-mailbox-export.md) |
 | Test rate limits and client backoff | [Rate-limit testing](docs/how-to/test-rate-limits.md) |
+| Assert retries and connection behaviour | [Command history](docs/how-to/inspect-client-behavior.md) |
 | Run, persist, or browse mail | [Run and test](docs/how-to/run-and-test.md) |
 | Look up API and settings | [HTTP API](docs/reference/http-api.md), [OpenAPI](openapi.yaml), [configuration](docs/reference/configuration.md) |
 | Understand protocol behavior | [IMAP](docs/reference/imap-behavior.md), [capabilities](docs/reference/capabilities.md) |
