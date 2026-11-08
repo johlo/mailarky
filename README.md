@@ -15,6 +15,8 @@ Use it to:
   flags.
 - **Test failure recovery:** reject a login, fail a send, impose a quota, or drop
   an IMAP connection, then check retries and reconnection.
+- **Test rate-limit handling:** cap SMTP and IMAP commands per account, then
+  verify that your client paces its requests and backs off when overloaded.
 
 Your application connects over standard SMTP and IMAP using its normal mail
 libraries. Your tests use an HTTP API to create accounts, load messages,
@@ -65,7 +67,7 @@ test account's generated credentials. For optional Roundcube webmail on port
 All published ports bind to loopback. Set `MAILARKY_SMTP_PORT`,
 `MAILARKY_IMAP_PORT`, and `MAILARKY_HTTP_PORT` to change them in the command
 above. See [configuration](docs/reference/configuration.md) for listener settings.
-Pin an image tag such as `ghcr.io/johlo/mailarky:v0.1.0` in CI;
+Pin an image tag such as `ghcr.io/johlo/mailarky:v0.6.0` in CI;
 `latest` follows stable releases. Stop and remove the container with
 `docker stop mailarky` and `docker rm mailarky`.
 
@@ -129,12 +131,40 @@ For **latency, bandwidth limits, TCP resets, and connection outages**, combine
 Mailarky with [Toxiproxy](https://github.com/Shopify/toxiproxy). Keep the HTTP
 control API directly accessible while SMTP or IMAP connections are failing.
 
+## Test rate limits
+
+Give each test account separate SMTP and IMAP command allowances to check
+whether your client handles provider throttling. For example, allow 10 SMTP
+commands and 20 IMAP commands per second:
+
+```sh
+curl -fsS http://localhost:8026/api/v1/accounts \
+  -H 'Content-Type: application/json' -d '{
+    "limits": {
+      "smtp_commands": 10,
+      "smtp_command_window": "1s",
+      "imap_commands": 20,
+      "imap_command_window": "1s"
+    }
+  }'
+```
+
+Authenticate with the returned credentials. Excess commands receive SMTP
+`451 4.7.0` or IMAP `NO [LIMIT]`; requests can succeed again after the window
+expires. Connections share the account's allowance, so reconnecting does not
+reset it. Other accounts have independent limits, and HTTP fixture setup and
+inspection stay available during overload. Limits are opt-in and apply after
+authentication.
+
+Use the [rate-limit testing guide](docs/how-to/test-rate-limits.md) for a runnable
+SMTP/IMAP example and checks for pacing, backoff, and concurrent connections.
+
 ## Enforced limits
 
 Limits reject excess work the way a provider would, without any fault rules:
-recipients per transaction, authenticated connections per account, sending rate
-for authenticated SMTP, and per-account storage quotas. Use them to test how a
-client adapts its batching, concurrency, and retries. See
+recipients per transaction, authenticated connections per account, SMTP/IMAP
+command rates, successful SMTP submissions, and per-account storage quotas.
+Use them to test how a client adapts its batching, concurrency, and retries. See
 [enforced limits](docs/reference/configuration.md#enforced-limits).
 
 ## Test OAuth
@@ -178,6 +208,7 @@ Release archives include the skill for that version.
 | Isolate parallel tests | [Accounts](docs/how-to/separate-mailboxes.md) |
 | Seed history or raw MIME | [Fixtures](docs/how-to/seed-test-scenarios.md) |
 | Load an exported mailbox | [Import](docs/how-to/import-mailbox-export.md) |
+| Test rate limits and client backoff | [Rate-limit testing](docs/how-to/test-rate-limits.md) |
 | Run, persist, or browse mail | [Run and test](docs/how-to/run-and-test.md) |
 | Look up API and settings | [HTTP API](docs/reference/http-api.md), [OpenAPI](openapi.yaml), [configuration](docs/reference/configuration.md) |
 | Understand protocol behavior | [IMAP](docs/reference/imap-behavior.md), [capabilities](docs/reference/capabilities.md) |
@@ -188,8 +219,9 @@ Release archives include the skill for that version.
 
 `make test` runs Go tests with the race detector and then `go vet`. Tests cover
 real SMTP/IMAP sockets, account isolation, persistence, API behavior, fault
-recovery, IMAP updates, and concurrent mutation. `scripts/smoke.py` exercises the
-Docker service using Python's independent SMTP and IMAP clients.
+recovery, command rate limits, IMAP updates, and concurrent mutation.
+`scripts/smoke.py` exercises the Docker service using Python's independent SMTP
+and IMAP clients.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for building, testing, updating the
 protocol forks, and publishing releases.

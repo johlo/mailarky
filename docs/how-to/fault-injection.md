@@ -203,36 +203,14 @@ codes, byte quotas, and the instance-wide SMTP recipient limit.
 
 ## Test client backoff under command overload
 
-Create a dedicated account with command limits for both protocols:
+Use per-account command limits to trigger SMTP `451 4.7.0` and IMAP
+`NO [LIMIT]` when a client exceeds its allowance. No fault rule is needed;
+limits apply across the account's authenticated connections and recover after
+the configured window. HTTP remains available for fixture setup and inspection.
 
-```sh
-curl -fsS http://localhost:8026/api/v1/accounts \
-  -H 'Content-Type: application/json' -d '{
-    "limits": {
-      "smtp_commands": 10,
-      "smtp_command_window": "1s",
-      "imap_commands": 20,
-      "imap_command_window": "1s"
-    }
-  }'
-```
-
-Configure the client with the returned credentials. Send more than 10 SMTP
-commands or 20 IMAP commands within a one-second window. SMTP returns
-`451 4.7.0`; IMAP returns tagged `NO [LIMIT]`. Assert that the client backs off
-and retries successfully after the window expires. Rejected commands do not
-perform their mailbox or delivery work. For a simple threshold test, send NOOP
-repeatedly after authentication; other commands also consume the allowance.
-
-Use several connections with these credentials to test aggregate load. They
-share the account's allowance, including across reconnects. Other accounts and
-the other protocol have independent allowances. HTTP fixture setup and
-inspection remain available when either protocol is overloaded.
-
-SMTP RSET/QUIT and IMAP LOGOUT remain available for cleanup. Authenticate SMTP
-clients for this test: anonymous delivery is outside per-account command limits.
-See [enforced limits](../reference/configuration.md#enforced-limits) for window
-semantics, configuration flags, and environment variables.
+Follow [test rate limits and client backoff](test-rate-limits.md) for account
+configuration, a runnable SMTP/IMAP example, and assertions for client pacing,
+recovery, and shared connection pools.
 
 ## Bound and remove a rule
 

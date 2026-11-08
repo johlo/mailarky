@@ -100,6 +100,9 @@ observability, not durable message delivery.
 
 ## Enforced limits
 
+For an executable SMTP/IMAP overload scenario, see
+[test rate limits and client backoff](../how-to/test-rate-limits.md).
+
 All limits default to unlimited (`0`), except the SMTP recipient limit (1,000).
 These settings reject excess work. `max_messages` and `max_age` above are
 retention policies that delete old messages; they do not enforce quotas.
