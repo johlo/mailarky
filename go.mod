@@ -1,6 +1,6 @@
 module github.com/johlo/mailarky
 
-go 1.27.3
+go 1.27.4
 
 require (
 	github.com/coder/websocket v1.8.15
@@ -10,12 +10,12 @@ require (
 	github.com/johlo/go-imap/v2 v2.0.0-beta.8.0.20261027212454-ae3e0004417f
 	github.com/johlo/go-smtp v0.25.1-0.20261004144625-b7869699e2e6
 	go.etcd.io/bbolt v1.5.0
-	golang.org/x/crypto v0.58.0
+	golang.org/x/crypto v0.59.0
 	golang.org/x/net v0.62.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
-	golang.org/x/sys v0.49.0 // indirect
-	golang.org/x/text v0.43.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
+	golang.org/x/text v0.44.0 // indirect
 )

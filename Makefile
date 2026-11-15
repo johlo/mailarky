@@ -13,7 +13,7 @@ docker:
 
 # Render the C4 architecture diagrams from their reladraw sources, in a light
 # and a dark variant. Requires Node.js.
-RELADRAW ?= npx --yes reladraw@0.23.1
+RELADRAW ?= npx --yes reladraw@0.31.1
 DIAGRAMS := context containers components
 
 diagrams:

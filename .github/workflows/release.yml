@@ -61,7 +61,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
-          version: v2.20.0
+          version: v2.20.2
           args: release --clean --skip=publish
 
       - name: Prepare certificate download and release notes
