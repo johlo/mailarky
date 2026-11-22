@@ -1,6 +1,6 @@
 # Pin the upstream source: Alps does not publish an ARM64 release binary.
 ARG ALPS_REVISION=67848b4b1cac29a05d37e51a9914ef1d53e1b358
-FROM --platform=$BUILDPLATFORM golang:1.27.4-alpine3.24@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.4-alpine3.24@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS builder
 RUN apk add --no-cache patch
 ARG ALPS_REVISION
 ADD https://github.com/migadu/alps.git#${ALPS_REVISION} /src
